@@ -1,0 +1,3306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hockey Shot Replay - Player Tracking Intelligence</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Instrument Sans', sans-serif;
+            background: #0a1628;
+            color: #e8edf2;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 320px 1fr 380px;
+            height: 100vh;
+            gap: 0;
+        }
+
+        /* Left Panel */
+        .left-panel {
+            background: #0d1b2e;
+            border-right: 1px solid #1a2f47;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .panel-header {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            color: #d4af37;  /* Gold (reverted) */
+            margin-bottom: 24px;
+            letter-spacing: -0.5px;
+        }
+
+        .filter-section {
+            margin-bottom: 28px;
+        }
+
+        .filter-label {
+            font-family: 'Instrument Sans', sans-serif;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #7a8a9e;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .filter-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .filter-btn {
+            padding: 8px 14px;
+            background: #152538;
+            border: 1px solid #1f3a56;
+            border-radius: 6px;
+            color: #a8b8cc;
+            font-family: 'Instrument Sans', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .filter-btn:hover {
+            background: #1a2f47;
+            border-color: #2a4a6f;
+        }
+
+        .filter-btn.active {
+            background: #d4af37;  /* Gold (reverted) */
+            border-color: #d4af37;
+            color: #0a1628;  /* Dark text on gold */
+            font-weight: 600;
+        }
+
+        .search-box, .lineup-selector {
+            width: 100%;
+            padding: 12px;
+            background: #152538;
+            border: 1px solid #1f3a56;
+            border-radius: 8px;
+            color: #e8edf2;
+            font-family: 'Instrument Sans', sans-serif;
+            font-size: 14px;
+        }
+
+        .search-box::placeholder {
+            color: #5a6a7e;
+        }
+
+        .player-list {
+            margin-top: 20px;
+        }
+
+        .player-item {
+            padding: 14px;
+            background: #152538;
+            border: 1px solid #1f3a56;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .player-item:hover {
+            background: #1a2f47;
+            border-color: #d4af37;
+            transform: translateX(4px);
+        }
+
+        .player-item.active {
+            background: #1a2f47;
+            border-color: #d4af37;  /* Gold (reverted) */
+            border-width: 2px;
+        }
+
+        .player-name {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: #e8edf2;
+            margin-bottom: 6px;
+        }
+
+        .player-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: #7a8a9e;
+        }
+
+        .player-stat {
+            font-family: 'Space Mono', monospace;
+            color: #d4af37;
+        }
+
+        /* Center Panel */
+        .center-panel {
+            background: #0a1628;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .rink-header {
+            padding: 24px 40px;
+            border-bottom: 1px solid #1a2f47;
+        }
+
+        .player-title {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 28px;
+            font-weight: 700;
+            color: #e8edf2;
+            margin-bottom: 6px;
+        }
+
+        .player-subtitle {
+            font-size: 14px;
+            color: #7a8a9e;
+            font-weight: 500;
+        }
+
+        /* Animation Controls */
+        .control-btn {
+            padding: 10px 18px;
+            background: #1a2f47;
+            border: 1px solid #2a4a6f;
+            border-radius: 8px;
+            color: #e8edf2;
+            font-family: 'Instrument Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .control-btn:hover {
+            background: #2a4a6f;
+            border-color: #d4af37;
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        .control-btn.playing {
+            background: #d4af37;
+            border-color: #d4af37;
+            color: #0a1628;
+        }
+
+        .speed-selector {
+            padding: 8px 14px;
+            background: #1a2f47;
+            border: 1px solid #2a4a6f;
+            border-radius: 6px;
+            color: #e8edf2;
+            font-family: 'Space Mono', monospace;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .player-dot {
+            cursor: pointer;
+        }
+
+        .player-dot.shooter {
+            filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.9));
+        }
+
+        .player-trail {
+            opacity: 0.35;
+            stroke-width: 2;
+            fill: none;
+            stroke-linecap: round;
+        }
+
+        .shot-marker {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* Sequence Timeline */
+        .sequence-event {
+            background: #1a2f47;
+            border: 1px solid #2a4a6f;
+            border-radius: 8px;
+            padding: 10px 14px;
+            min-width: 180px;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .sequence-event:hover {
+            border-color: #d4af37;
+            transform: translateY(-2px);
+        }
+
+        .sequence-event.shot-event {
+            background: linear-gradient(135deg, #d4af37 0%, #f4d768 100%);
+            border-color: #d4af37;
+        }
+
+        .sequence-event.shot-event * {
+            color: #0a1628 !important;
+        }
+
+        .sequence-time {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: #d4af37;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .sequence-player {
+            font-size: 12px;
+            font-weight: 600;
+            color: #e8edf2;
+            margin-bottom: 3px;
+        }
+
+        .sequence-event-type {
+            font-size: 11px;
+            color: #a8b8cc;
+            margin-bottom: 2px;
+        }
+
+        .sequence-outcome {
+            font-size: 10px;
+            color: #7a8a9e;
+            font-style: italic;
+        }
+
+        .sequence-outcome.successful {
+            color: #4ade80;
+        }
+
+        .sequence-outcome.failed {
+            color: #ff6b6b;
+        }
+
+        /* Right Panel */
+        .right-panel {
+            background: #0d1b2e;
+            border-left: 1px solid #1a2f47;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .stat-card {
+            background: #152538;
+            border: 1px solid #1f3a56;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card-header {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: #7a8a9e;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+        }
+
+        .stat-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 36px;
+            font-weight: 700;
+            color: #d4af37;
+            margin-bottom: 4px;
+        }
+
+        .stat-comparison {
+            font-size: 13px;
+            color: #7a8a9e;
+        }
+
+        .percentile-bar {
+            width: 100%;
+            height: 8px;
+            background: #1a2f47;
+            border-radius: 4px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+
+        .percentile-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #d4af37 0%, #f4d768 100%);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .zone-time-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .zone-time-item {
+            text-align: center;
+            padding: 12px;
+            background: #1a2f47;
+            border-radius: 8px;
+        }
+
+        .zone-time-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: #d4af37;
+        }
+
+        .zone-time-label {
+            font-size: 11px;
+            color: #7a8a9e;
+            margin-top: 4px;
+            text-transform: uppercase;
+        }
+
+        .tendency-item {
+            margin-bottom: 16px;
+        }
+
+        .tendency-label {
+            font-size: 12px;
+            color: #a8b8cc;
+            margin-bottom: 6px;
+        }
+
+        .tendency-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: #e8edf2;
+            margin-bottom: 6px;
+        }
+
+        .tendency-bar {
+            width: 100%;
+            height: 6px;
+            background: #1a2f47;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .tendency-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .shot-metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #1a2f47;
+        }
+
+        .shot-metric:last-child {
+            border-bottom: none;
+        }
+
+        .shot-metric-label {
+            font-size: 13px;
+            color: #a8b8cc;
+        }
+
+        .shot-metric-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: #d4af37;
+        }
+
+        .tactical-recommendation {
+            margin-bottom: 16px;
+            padding: 12px;
+            background: rgba(212, 175, 55, 0.1);
+            border-radius: 6px;
+        }
+
+        .tactical-recommendation:last-child {
+            margin-bottom: 0;
+        }
+
+        .tactic-title {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            color: #d4af37;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tactic-description {
+            font-size: 13px;
+            color: #e8edf2;
+            line-height: 1.6;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0d1b2e;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #1f3a56;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #2a4a6f;
+        }
+
+        /* Expected Threat Placeholder */
+        .xt-placeholder {
+            background: linear-gradient(135deg, #2a4a6f 0%, #1a2f47 100%);
+            border: 2px dashed #4488ff;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            margin-top: 16px;
+        }
+
+        .xt-placeholder-title {
+            font-size: 12px;
+            color: #4488ff;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .xt-placeholder-text {
+            font-size: 11px;
+            color: #7a8a9e;
+        }
+
+        /* Print Styles */
+        @media print {
+            /* Hide the app interface, show only print report */
+            .app-container {
+                display: none !important;
+            }
+            
+            .print-report {
+                display: block !important;
+                position: relative;
+                width: 100%;
+                max-width: 8.5in;
+                margin: 0 auto;
+            }
+            
+            @page {
+                size: letter;
+                margin: 0.5in;
+            }
+        }
+
+        .print-report {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Panel: Player List -->
+        <div class="left-panel">
+            <div class="panel-header">Players</div>
+            
+            <div class="filter-section">
+                <div class="filter-label">Team Lineups</div>
+                <select id="team-lineup-selector" class="lineup-selector">
+                    <option value="all">All Teams</option>
+                </select>
+            </div>
+            
+            <div class="filter-section">
+                <div class="filter-label">Position</div>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-filter="position" data-value="all">All</button>
+                    <button class="filter-btn" data-filter="position" data-value="F">Forward</button>
+                    <button class="filter-btn" data-filter="position" data-value="D">Defense</button>
+                </div>
+            </div>
+
+            <div class="filter-section">
+                <div class="filter-label">Game</div>
+                <select id="game-selector" class="lineup-selector">
+                    <option value="all">All Games</option>
+                </select>
+            </div>
+
+            <div class="filter-section">
+                <div class="filter-label">Search</div>
+                <input type="text" class="search-box" placeholder="Search players..." id="player-search">
+            </div>
+
+            <div class="player-list" id="player-list"></div>
+        </div>
+
+        <!-- Center Panel: Shot Replay -->
+        <div class="center-panel">
+            <div class="rink-header">
+                <div class="player-title" id="selected-player-name">Select a Player</div>
+                <div class="player-subtitle" id="selected-player-info">Choose a player to view shot replays with tracking data</div>
+            </div>
+            
+            <!-- Placeholder -->
+            <div id="player-placeholder" style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 40px;">
+                <div style="font-size: 64px; margin-bottom: 24px;">🏒</div>
+                <h3 style="font-family: 'DM Sans', sans-serif; font-size: 28px; color: #d4af37; margin-bottom: 16px;">No Player Selected</h3>
+                <p style="color: #7a8a9e; font-size: 16px; max-width: 400px; line-height: 1.6;">
+                    Select a player from the left panel to view their shot replays with 5-second pre-shot and 3-second post-shot player tracking
+                </p>
+            </div>
+            
+            <!-- Shot Replay Interface -->
+            <div id="replay-interface" style="display: none; flex-direction: column; min-height: 100%;">
+                <!-- Shot Selector Bar -->
+                <div style="padding: 20px 32px; background: #152538; border-bottom: 1px solid #1f3a56; flex-shrink: 0;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px;">
+                        <div>
+                            <label style="font-size: 11px; color: #7a8a9e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block; font-weight: 600;">
+                                Select Shot Event
+                                <span style="cursor: help; margin-left: 6px;" title="Format: Time - Danger Level - Outcome - Distance
+HD = High Danger (<30ft)
+MD = Mid Range (30-60ft)  
+LD = Long Range (>60ft)
+✓ = On Net, ✗ = Missed, GOAL = Scored">ℹ️</span>
+                            </label>
+                            <select id="shot-selector" class="lineup-selector">
+                                <option value="">Choose a shot...</option>
+                            </select>
+                            <div style="font-size: 10px; color: #5a6a7e; margin-top: 6px; line-height: 1.4;">
+                                Format: <strong>Time - Danger - Outcome (Distance)</strong><br>
+                                HD=High(&lt;30ft) | MD=Mid(30-60ft) | LD=Long(&gt;60ft)
+                            </div>
+                        </div>
+                        <div>
+                            <label style="font-size: 11px; color: #7a8a9e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: block; font-weight: 600;">Shots in Chronological Order</label>
+                            <input type="range" id="shot-timeline" min="0" max="0" value="0" style="width: 100%; height: 8px; accent-color: #d4af37; cursor: pointer;">
+                        </div>
+                    </div>
+                    <div id="shot-info-bar" style="display: flex; flex-wrap: wrap; gap: 24px; font-size: 13px; color: #a8b8cc;">
+                        <span><strong style="color: #d4af37;">Period:</strong> <span id="shot-period">-</span></span>
+                        <span><strong style="color: #d4af37;">Time:</strong> <span id="shot-time">-</span></span>
+                        <span><strong style="color: #d4af37;">Score:</strong> <span id="shot-score">-</span></span>
+                        <span><strong style="color: #d4af37;">Outcome:</strong> <span id="shot-outcome">-</span></span>
+                        <span><strong style="color: #d4af37;">Distance:</strong> <span id="shot-distance">-</span></span>
+                        <span id="xt-value-display" style="display: none;"><strong style="color: #4488ff;">EPV:</strong> <span id="shot-xt">-</span></span>
+                    </div>
+                </div>
+                
+                <!-- Rink with Animation -->
+                <div style="min-height: 700px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 20px 20px 20px; flex-shrink: 0;">
+                    
+                    <!-- Sequence Timeline -->
+                    <div id="sequence-timeline" style="width: 100%; max-width: 900px; background: #152538; border: 1px solid #1f3a56; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; display: none;">
+                        <div style="font-size: 12px; font-weight: 600; color: #d4af37; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <span>Sequence Leading to Shot</span>
+                            <span id="sequence-count" style="font-size: 11px; color: #7a8a9e; font-weight: 500; text-transform: none;">-</span>
+                        </div>
+                        <div id="sequence-events" style="display: flex; gap: 8px; overflow-x: auto; padding: 8px 0;">
+                            <!-- Events will be inserted here -->
+                        </div>
+                    </div>
+                    
+                    <svg id="rink-svg" style="max-width: 100%; margin-bottom: 24px;"></svg>
+                    
+                    <!-- Animation Controls Below Rink -->
+                    <div id="animation-controls" style="background: rgba(13, 27, 46, 0.98); padding: 18px 28px; border-radius: 14px; border: 1px solid #d4af37; box-shadow: 0 8px 24px rgba(0,0,0,0.4); display: none; max-width: 900px; width: 100%;">
+                        <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+                            <button id="play-pause-btn" class="control-btn" onclick="togglePlayPause()">▶ Play</button>
+                            <button id="restart-btn" class="control-btn" onclick="restartReplay()">↺ Restart</button>
+                            <button id="step-back-btn" class="control-btn" onclick="stepBack()">⏮ -0.5s</button>
+                            <button id="step-forward-btn" class="control-btn" onclick="stepForward()">+0.5s ⏭</button>
+                            <div style="width: 1px; height: 32px; background: #2a4a6f; margin: 0 4px;"></div>
+                            <label style="font-size: 12px; color: #7a8a9e; margin-right: 4px; font-weight: 600;">Speed:</label>
+                            <select id="playback-speed" class="speed-selector" onchange="changePlaybackSpeed(this.value)">
+                                <option value="0.5">0.5x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="2">2x</option>
+                                <option value="4">4x</option>
+                            </select>
+                            <div style="margin-left: 16px; flex: 1; min-width: 220px;">
+                                <input type="range" id="replay-timeline" min="0" max="100" value="0" style="width: 100%; accent-color: #d4af37; cursor: pointer;" oninput="scrubTimeline(this.value)">
+                                <div style="font-family: 'Space Mono', monospace; font-size: 12px; color: #d4af37; margin-top: 6px; text-align: center; font-weight: 700;">
+                                    <span id="replay-time-display">-5.0s</span> <span style="color: #7a8a9e;">/ <span id="replay-duration-display">8.0s</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Players On Ice Panel -->
+                <div style="padding: 18px 32px; background: #152538; border-top: 1px solid #1f3a56; flex-shrink: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                        <div style="font-size: 12px; font-weight: 600; color: #7a8a9e; text-transform: uppercase; letter-spacing: 0.5px;">Players On Ice</div>
+                        <div id="tracking-status" style="font-size: 11px; color: #ffaa33; font-weight: 600;">
+                            <!-- Will show: "X players not visible (computer vision)" -->
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                        <div>
+                            <div style="font-size: 12px; color: #ff8844; margin-bottom: 8px; font-weight: 600;">● OFFENSIVE TEAM</div>
+                            <div id="offensive-players" style="font-size: 12px; color: #e8edf2; line-height: 1.8;">-</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #4488ff; margin-bottom: 8px; font-weight: 600;">● DEFENSIVE TEAM</div>
+                            <div id="defensive-players" style="font-size: 12px; color: #e8edf2; line-height: 1.8;">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Scouting Report -->
+        <div class="right-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <div class="panel-header" style="margin-bottom: 0;">Scouting Report</div>
+                <button id="download-report-btn" style="display: none; background: #d4af37; border: none; border-radius: 8px; color: #0a1628; font-family: 'Instrument Sans', sans-serif; font-size: 13px; font-weight: 600; padding: 10px 18px; cursor: pointer; transition: all 0.2s;" 
+                        onclick="if(currentPlayer) generateIndividualReport(currentPlayer);">
+                    <!-- Gold (reverted) -->
+                    📄 Download Report
+                </button>
+            </div>
+
+            <div id="scouting-placeholder" style="text-align: center; padding: 60px 20px;">
+                <div style="font-size: 64px; margin-bottom: 20px;">📊</div>
+                <h3 style="font-family: 'DM Sans', sans-serif; font-size: 20px; color: #d4af37; margin-bottom: 12px;">No Player Selected</h3>
+                <p style="color: #7a8a9e; font-size: 14px; line-height: 1.6;">
+                    Select a player to view:<br>
+                    • Attack tendencies<br>
+                    • Shot characteristics<br>
+                    • Defensive metrics<br>
+                    • Tactical recommendations
+                </p>
+            </div>
+
+            <div id="scouting-content" style="display: none;">
+                <!-- Player Profile -->
+                <div class="stat-card">
+                    <div class="stat-card-header">Player Profile</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div>
+                            <div style="font-family: 'Space Mono', monospace; font-size: 14px; color: #d4af37; margin-bottom: 4px;" id="player-handed">Shoots: -</div>
+                            <div style="font-size: 12px; color: #7a8a9e;">Position: <span id="player-position-detail">-</span></div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="stat-value" style="font-size: 24px;" id="total-shots">0</div>
+                            <div style="font-size: 11px; color: #7a8a9e;">Total Shots</div>
+                        </div>
+                    </div>
+                    <div class="percentile-bar">
+                        <div class="percentile-fill" id="shots-percentile" style="width: 0%;"></div>
+                    </div>
+                    <div style="margin-top: 8px; font-family: 'Space Mono', monospace; font-size: 12px; color: #d4af37;" id="shots-percentile-text">-</div>
+                </div>
+
+                <!-- Attack Tendencies -->
+                <div class="stat-card">
+                    <div class="stat-card-header">🎯 Attack Tendencies</div>
+                    <div class="tendency-item">
+                        <div class="tendency-label"><span style="color: #d4af37;">●</span> Strong-Side Bias</div>
+                        <div class="tendency-value" id="strong-side-bias">-</div>
+                        <div class="tendency-bar">
+                            <div class="tendency-bar-fill" id="strong-side-bar" style="width: 0%; background: linear-gradient(90deg, #d4af37 0%, #f4d768 100%);"></div>
+                        </div>
+                    </div>
+                    <div class="tendency-item">
+                        <div class="tendency-label"><span style="color: #d4af37;">●</span> Preferred Attack Lane</div>
+                        <div class="tendency-value" id="attack-lane">-</div>
+                    </div>
+                    <div class="tendency-item">
+                        <div class="tendency-label"><span style="color: #d4af37;">●</span> Shot Release Zone</div>
+                        <div class="tendency-value" id="shot-zone">-</div>
+                    </div>
+                </div>
+
+                <!-- Shot Characteristics -->
+                <div class="stat-card">
+                    <div class="stat-card-header">⚡ Shot Characteristics</div>
+                    
+                    <!-- EPV moved here from below -->
+                    <!-- Expected Possession Value (EPV) -->
+                    <div id="epv-display" class="xt-placeholder">
+                        <div class="xt-placeholder-title">🎯 Expected Possession Value (EPV)</div>
+                        <div class="xt-placeholder-text">Loading EPV data...</div>
+                    </div>
+                </div>
+
+                <!-- Zone Time -->
+                <div class="stat-card">
+                    <div class="stat-card-header">🏒 Zone Time Distribution</div>
+                    <div class="zone-time-grid">
+                        <div class="zone-time-item">
+                            <div class="zone-time-value" id="defensive-zone">-%</div>
+                            <div class="zone-time-label">Defensive</div>
+                        </div>
+                        <div class="zone-time-item">
+                            <div class="zone-time-value" id="neutral-zone">-%</div>
+                            <div class="zone-time-label">Neutral</div>
+                        </div>
+                        <div class="zone-time-item">
+                            <div class="zone-time-value" id="offensive-zone">-%</div>
+                            <div class="zone-time-label">Offensive</div>
+                        </div>
+                    </div>
+                    <div id="zone-time-note" style="margin-top: 12px; padding: 8px; background: #1a2f47; border-radius: 6px; font-size: 10px; color: #7a8a9e; text-align: center; display: none;">
+                        ⚠️ No computer vision tracking data available for this player
+                    </div>
+                </div>
+                
+                <!-- Speed Bursts -->
+                <div class="stat-card">
+                    <div class="stat-card-header">⚡ Speed Bursts</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div style="text-align: center; padding: 14px; background: #1a2f47; border-radius: 8px;">
+                            <div style="font-size: 11px; color: #7a8a9e; margin-bottom: 6px; text-transform: uppercase;">20+ MPH</div>
+                            <div style="font-family: 'Space Mono', monospace; font-size: 28px; font-weight: 700; color: #d4af37;" id="bursts-20-total">-</div>
+                            <div style="font-size: 11px; color: #7a8a9e; margin-top: 4px;">Total Bursts</div>
+                            <div style="font-family: 'Space Mono', monospace; font-size: 16px; font-weight: 600; color: #4488ff; margin-top: 6px;" id="bursts-20-per60">-</div>
+                            <div style="font-size: 10px; color: #7a8a9e;">per 60 min</div>
+                        </div>
+                        <div style="text-align: center; padding: 14px; background: #1a2f47; border-radius: 8px;">
+                            <div style="font-size: 11px; color: #7a8a9e; margin-bottom: 6px; text-transform: uppercase;">22+ MPH</div>
+                            <div style="font-family: 'Space Mono', monospace; font-size: 28px; font-weight: 700; color: #d4af37;" id="bursts-22-total">-</div>
+                            <div style="font-size: 11px; color: #7a8a9e; margin-top: 4px;">Total Bursts</div>
+                            <div style="font-family: 'Space Mono', monospace; font-size: 16px; font-weight: 600; color: #4488ff; margin-top: 6px;" id="bursts-22-per60">-</div>
+                            <div style="font-size: 10px; color: #7a8a9e;">per 60 min</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- On-Ice Load -->
+                <div class="stat-card">
+                    <div class="stat-card-header">🏃 On-Ice Load (OIL)</div>
+                    <div style="text-align: center; padding: 20px; background: #1a2f47; border-radius: 8px;">
+                        <div style="font-size: 11px; color: #7a8a9e; margin-bottom: 8px; text-transform: uppercase;">Workload Index</div>
+                        <div style="font-family: 'Space Mono', monospace; font-size: 40px; font-weight: 700; color: #d4af37; margin-bottom: 6px;" id="oil-per-min">-</div>
+                        <div style="font-size: 13px; color: #7a8a9e; margin-bottom: 12px;">OIL·min⁻¹</div>
+                        <div style="border-top: 1px solid #2a3f5a; padding-top: 12px; margin-top: 8px;">
+                            <div style="font-size: 11px; color: #7a8a9e;">Time On Ice: <span id="oil-toi" style="color: #4488ff; font-weight: 600;">-</span> min</div>
+                            <div style="font-size: 11px; color: #7a8a9e; margin-top: 4px;">Total Load: <span id="oil-total" style="color: #4488ff; font-weight: 600;">-</span></div>
+                        </div>
+                        <div style="font-size: 10px; color: #a8b8cc; margin-top: 12px; font-style: italic;" id="oil-assessment">-</div>
+                    </div>
+                </div>
+
+                <!-- Tactical Positioning -->
+                <div class="stat-card" style="background: linear-gradient(135deg, #1a2f47 0%, #152538 100%); border: 2px solid #d4af37;">
+                    <div class="stat-card-header" style="color: #d4af37;">📋 Defensive Positioning</div>
+                    <div class="tactical-recommendation">
+                        <div class="tactic-title">Lateral Adjustment</div>
+                        <div class="tactic-description" id="lateral-tactic">-</div>
+                    </div>
+                    <div class="tactical-recommendation">
+                        <div class="tactic-title">Depth Adjustment</div>
+                        <div class="tactic-description" id="depth-tactic">-</div>
+                    </div>
+                    <div class="tactical-recommendation">
+                        <div class="tactic-title">Key Tendencies</div>
+                        <div class="tactic-description" id="key-tendencies">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global data storage
+        let eventsData = [];
+        let gamesData = [];
+        let playersData = [];
+        let stintsData = [];
+        let trackingData = [];
+        
+        // EPV data storage
+        let epvPossessionsData = [];
+        let epvPlayerData = [];
+        let epvModelInfo = {};
+        
+        let processedPlayers = [];
+        let currentPlayer = null;
+        let filters = { position: 'all', team: 'all', game: 'all', search: '' };
+        let availableTeams = [];
+        let availableGames = [];
+        
+        // Shot replay state
+        let currentShot = null;
+        let playerShots = [];
+        let replayData = null;
+        let animationFrameId = null;
+        let isPlaying = false;
+        let playbackSpeed = 1;
+        let currentReplayTime = -5;
+
+        // Data loading
+        window.loadHockeyData = function(data) {
+            console.log('🔄 Loading hockey data...');
+            console.log('Data structure:', {
+                hasEvents: !!data.events,
+                hasGames: !!data.games,
+                hasPlayers: !!data.players,
+                hasStints: !!data.stints,
+                hasTracking: !!data.tracking,
+                eventsCount: data.events?.length || 0,
+                playersCount: data.players?.length || 0
+            });
+            
+            try {
+                if (data.events) eventsData = data.events;
+                if (data.games) gamesData = data.games;
+                if (data.players) playersData = data.players;
+                if (data.stints) stintsData = data.stints;
+                if (data.tracking) trackingData = data.tracking;
+                
+                console.log('📊 Data assigned to global variables');
+                
+                processPlayerData();
+                console.log('✅ Player data processed:', processedPlayers.length, 'players');
+                
+                init();
+                console.log('✅ App initialized successfully!');
+            } catch (error) {
+                console.error('❌ Error loading data:', error);
+                alert('Error loading data. Check console (F12) for details.');
+            }
+        };
+        
+        // EPV data loading
+        window.loadEPVData = function(data) {
+            console.log('📊 Loading EPV data...');
+            
+            if (data.possessions) epvPossessionsData = data.possessions;
+            if (data.player_epv) epvPlayerData = data.player_epv;
+            if (data.model_info) epvModelInfo = data.model_info;
+            
+            console.log(`✅ EPV data loaded:`);
+            console.log(`   • ${epvPossessionsData.length} possessions`);
+            console.log(`   • ${epvPlayerData.length} players`);
+            console.log(`   • Model: ${epvModelInfo.model_type}`);
+            console.log(`   • Avg EPV: ${epvModelInfo.avg_epv?.toFixed(4)}`);
+            
+            // Update UI if player already selected
+            if (currentPlayer) {
+                updatePlayerStats();
+            }
+        };
+
+        window.useSampleData = function() {
+            generateSampleData();
+            processPlayerData();
+            init();
+        };
+
+        function generateSampleData() {
+            const samplePlayers = [
+                { player_id: "p1", player_name: "McKown, Hunter", last_name: "McKown", first_name: "Hunter", handed: "R", position_group: "F", primary_position: "C" },
+                { player_id: "p2", player_name: "Jiricek, David", last_name: "Jiricek", first_name: "David", handed: "R", position_group: "D", primary_position: "D" },
+                { player_id: "p3", player_name: "Angle, Tyler", last_name: "Angle", first_name: "Tyler", handed: "L", position_group: "F", primary_position: "LW" },
+                { player_id: "p4", player_name: "Johansson, Albert", last_name: "Johansson", first_name: "Albert", handed: "L", position_group: "D", primary_position: "D" },
+                { player_id: "p5", player_name: "L'Esperance, Joel", last_name: "L'Esperance", first_name: "Joel", handed: "R", position_group: "F", primary_position: "RW" },
+                { player_id: "p6", player_name: "Whelan, Alex", last_name: "Whelan", first_name: "Alex", handed: "R", position_group: "F", primary_position: "C" }
+            ];
+
+            const teamAssignments = {
+                "CLE": ["p1", "p2", "p3"],
+                "GR": ["p4", "p5", "p6"]
+            };
+            
+            playersData = samplePlayers;
+            eventsData = [];
+            trackingData = [];
+            
+            samplePlayers.forEach((player) => {
+                let team = "CLE";
+                for (const [teamCode, playerIds] of Object.entries(teamAssignments)) {
+                    if (playerIds.includes(player.player_id)) {
+                        team = teamCode;
+                        break;
+                    }
+                }
+                
+                const oppTeam = team === "CLE" ? "GR" : "CLE";
+                
+                // Generate shots across 3 periods
+                for (let period = 1; period <= 3; period++) {
+                    const shotsInPeriod = Math.floor(3 + Math.random() * 8);
+                    for (let i = 0; i < shotsInPeriod; i++) {
+                        const periodTime = Math.random() * 1200; // 0-20 minutes
+                        const zoneRandom = Math.random();
+                        let x_adj, y_adj;
+                        
+                        if (zoneRandom < 0.5) {
+                            x_adj = 60 + Math.random() * 29;
+                            y_adj = -20 + Math.random() * 40;
+                        } else if (zoneRandom < 0.85) {
+                            x_adj = 25 + Math.random() * 35;
+                            y_adj = -35 + Math.random() * 70;
+                        } else {
+                            x_adj = -20 + Math.random() * 45;
+                            y_adj = -40 + Math.random() * 80;
+                        }
+                        
+                        const outcomes = ['successful', 'failed', 'goal'];
+                        
+                        eventsData.push({
+                            game_id: "game_001",
+                            period: period,
+                            period_time: periodTime,
+                            player_id: player.player_id,
+                            player_name: player.player_name,
+                            team: team,
+                            opp_team: oppTeam,
+                            x: x_adj,
+                            y: y_adj,
+                            x_adj: x_adj,
+                            y_adj: y_adj,
+                            description: "SHOT",
+                            event_type: "shot",
+                            outcome: outcomes[Math.floor(Math.random() * outcomes.length)],
+                            has_tracking_data: 1
+                        });
+                    }
+                }
+                
+                // Generate tracking data
+                for (let i = 0; i < 500; i++) {
+                    let tracking_x = player.position_group === 'F' ? -40 + Math.random() * 129 : -89 + Math.random() * 129;
+                    let tracking_y = -42.5 + Math.random() * 85;
+                    const speed = 8 + Math.random() * 17;
+                    const angle = Math.random() * 2 * Math.PI;
+                    
+                    trackingData.push({
+                        player_id: player.player_id,
+                        player_name: player.player_name,
+                        team_name: team,
+                        tracking_x: tracking_x,
+                        tracking_y: tracking_y,
+                        tracking_vel_x: Math.cos(angle) * speed,
+                        tracking_vel_y: Math.sin(angle) * speed
+                    });
+                }
+            });
+        }
+        
+        // Calculate Speed Burst Bouts - counts upward crossings of speed threshold
+        function computeBurstBouts(trackingData, mphThreshold = 20) {
+            const FPS_TO_MPH = 0.681818;
+            let bouts = 0;
+            let prevAbove = false;
+            
+            for (let i = 0; i < trackingData.length; i++) {
+                const vX = Number(trackingData[i].tracking_vel_x);
+                const vY = Number(trackingData[i].tracking_vel_y);
+                
+                if (!Number.isFinite(vX) || !Number.isFinite(vY)) {
+                    prevAbove = false;
+                    continue;
+                }
+                
+                // Speed in ft/s
+                const speedFps = Math.sqrt(vX * vX + vY * vY);
+                // Convert to MPH
+                const speedMph = speedFps * FPS_TO_MPH;
+                const above = speedMph > mphThreshold;
+                
+                // Count upward crossings only
+                if (above && !prevAbove) bouts += 1;
+                prevAbove = above;
+            }
+            
+            return bouts;
+        }
+        
+        // Calculate Player Load (OIL) - measures workload via jerk (change in acceleration)
+        // Only counts accelerations > 0.3 m/s² (0.984 ft/s²)
+        function calculatePlayerLoad(trackingData, eventsData) {
+            if (!trackingData || trackingData.length < 3) {
+                console.log('  OIL: Insufficient tracking data');
+                return 0;
+            }
+            
+            // Link tracking to timestamps via sl_event_id
+            const trackingWithTime = [];
+            let nullVelocities = 0;
+            
+            trackingData.forEach(t => {
+                if (t.tracking_vel_x === null || t.tracking_vel_y === null || 
+                    !Number.isFinite(t.tracking_vel_x) || !Number.isFinite(t.tracking_vel_y)) {
+                    nullVelocities++;
+                    return;
+                }
+                
+                const event = eventsData.find(e => e.sl_event_id === t.sl_event_id && e.game_id === t.game_id);
+                if (event && event.period_time !== null && event.period_time !== undefined) {
+                    trackingWithTime.push({
+                        time: event.period_time,
+                        sl_event_id: t.sl_event_id,
+                        vel_x: t.tracking_vel_x,
+                        vel_y: t.tracking_vel_y
+                    });
+                }
+            });
+            
+            console.log(`  Tracking: ${trackingData.length} points, ${nullVelocities} with null/NaN velocities, ${trackingWithTime.length} linked to events`);
+            
+            if (trackingWithTime.length < 3) {
+                console.log('  OIL: Not enough tracking points with valid velocities and timestamps');
+                return 0;
+            }
+            
+            // Sort by time
+            trackingWithTime.sort((a, b) => a.time - b.time);
+            
+            // Method A: Use only REAL event time differences (no micro-gaps)
+            // Skip tracking points with same sl_event_id since they have identical timestamps
+            
+            // Filter to unique events only (one tracking point per event)
+            const uniqueEventTracking = [];
+            const seenEvents = new Set();
+            
+            for (let i = 0; i < trackingWithTime.length; i++) {
+                const point = trackingWithTime[i];
+                if (!seenEvents.has(point.sl_event_id)) {
+                    uniqueEventTracking.push(point);
+                    seenEvents.add(point.sl_event_id);
+                }
+            }
+            
+            console.log(`  Using ${uniqueEventTracking.length} unique events for OIL (from ${trackingWithTime.length} tracking points)`);
+            
+            // Calculate Player Load using jerk with acceleration threshold
+            let playerLoad = 0;
+            let validCalculations = 0;
+            
+            for (let i = 2; i < uniqueEventTracking.length; i++) {
+                const p0 = uniqueEventTracking[i - 2];
+                const p1 = uniqueEventTracking[i - 1];
+                const p2 = uniqueEventTracking[i];
+                
+                const dt1 = p1.time - p0.time;
+                const dt2 = p2.time - p1.time;
+                
+                if (!dt1 || !dt2 || dt1 <= 0 || dt2 <= 0) continue;
+                if (dt1 > 5 || dt2 > 5) continue; // Clip tracking gaps > 5 seconds (more lenient)
+                
+                // Calculate accelerations (ft/s²) from velocity changes
+                const accelX1 = (p1.vel_x - p0.vel_x) / dt1;
+                const accelY1 = (p1.vel_y - p0.vel_y) / dt1;
+                const accelX2 = (p2.vel_x - p1.vel_x) / dt2;
+                const accelY2 = (p2.vel_y - p1.vel_y) / dt2;
+                
+                if (!Number.isFinite(accelX1) || !Number.isFinite(accelY1) ||
+                    !Number.isFinite(accelX2) || !Number.isFinite(accelY2)) continue;
+                
+                const accelMagnitude = Math.sqrt(accelX2 * accelX2 + accelY2 * accelY2);
+                
+                // Only count high-intensity accelerations
+                // Threshold: 0.3 m/s² = 0.984 ft/s²
+                if (accelMagnitude < 0.984) continue;
+                
+                // Calculate jerk (change in acceleration) - ft/s³
+                const jerkX = accelX2 - accelX1;
+                const jerkY = accelY2 - accelY1;
+                const jerkMagnitude = Math.sqrt(jerkX * jerkX + jerkY * jerkY);
+                
+                if (!Number.isFinite(jerkMagnitude)) continue;
+                
+                // Time-weighted jerk accumulation
+                playerLoad += jerkMagnitude * dt2;
+                validCalculations++;
+            }
+            
+            console.log(`  OIL calculation: ${validCalculations} valid jerk measurements, load=${playerLoad.toFixed(2)}`);
+            
+            // Scaling factor - adjust this to get reasonable OIL·min⁻¹ range (0.5-3.0)
+            // If your values are too high (10+), increase this divisor
+            const SCALING_FACTOR = 500;  // Try 500 instead of 100 for better range
+            
+            return Number.isFinite(playerLoad) ? playerLoad / SCALING_FACTOR : 0;
+        }
+
+        function processPlayerData() {
+            console.log('🔄 Processing player data...');
+            console.log('📊 Initial data counts:');
+            console.log(`   - playersData: ${playersData.length}`);
+            console.log(`   - eventsData: ${eventsData.length}`);
+            console.log(`   - trackingData: ${trackingData.length}`);
+            console.log(`   - stintsData: ${stintsData.length}`);
+            
+            const playerStats = new Map();
+            
+            if (!playersData || playersData.length === 0) {
+                console.warn('⚠️ No players data available');
+                return;
+            }
+            
+            console.log(`Processing ${playersData.length} players...`);
+            
+            let playersProcessed = 0;
+            let playersWithNoEvents = 0;
+            let playersWithNoTeam = 0;
+            let playersWithNoShots = 0;
+            
+            try {
+                playersData.forEach(player => {
+                const playerEvents = eventsData.filter(e => e.player_id === player.player_id);
+                const playerTracking = trackingData.filter(t => t.player_id === player.player_id);
+                
+                // Track exclusion reasons
+                if (playerEvents.length === 0) {
+                    playersWithNoEvents++;
+                    return; // Skip players with no events
+                }
+                
+                const shots = playerEvents.filter(e => 
+                    e.description && (e.description.includes('SHOT') || e.event_type === 'shot')
+                ).length;
+                
+                if (shots === 0) {
+                    playersWithNoShots++;
+                    // Still process them but note they have no shots
+                }
+                
+                const team = playerEvents.length > 0 ? playerEvents[0].team : 'N/A';
+                
+                if (!team || team === 'N/A' || team === 'Unknown') {
+                    playersWithNoTeam++;
+                    return; // Will be filtered out later
+                }
+                
+                playersProcessed++;
+                
+                const avgShots = player.position_group === 'F' ? 64 : 52;
+                
+                // Percentile will be calculated after all players are processed
+                let percentile = 50; // Placeholder
+                
+                let defZoneCount = 0, neutralCount = 0, offZoneCount = 0;
+                playerTracking.forEach(t => {
+                    // Skip invalid tracking points (null, undefined, or 0,0 origin)
+                    if (!t.tracking_x || !t.tracking_y || 
+                        (t.tracking_x === 0 && t.tracking_y === 0) ||
+                        !Number.isFinite(t.tracking_x)) {
+                        return;
+                    }
+                    
+                    if (t.tracking_x < -25) defZoneCount++;
+                    else if (t.tracking_x > 25) offZoneCount++;
+                    else neutralCount++;
+                });
+                
+                const total = defZoneCount + neutralCount + offZoneCount;
+                const hasZoneData = total > 0;
+                
+                console.log(`Player ${player.player_name}: Zone counts - D:${defZoneCount}, N:${neutralCount}, O:${offZoneCount}, Total:${total}`);
+                
+                // Calculate On-Ice Load (OIL) - high-intensity workload metric
+                const playerOIL = calculatePlayerLoad(playerTracking, eventsData);
+                console.log(`Player ${player.player_name}: OIL=${playerOIL}, tracking points=${playerTracking.length}`);
+                
+                // Calculate Speed Bursts at 20+ and 22+ MPH
+                const bursts20 = computeBurstBouts(playerTracking, 20);
+                const bursts22 = computeBurstBouts(playerTracking, 22);
+                
+                // Get time on ice from stints for OIL per minute and bursts per 60
+                const playerStints = stintsData.filter(s => s.player_id === player.player_id);
+                const totalTOI = playerStints.reduce((sum, s) => {
+                    const duration = (s.period_time_end || 0) - (s.period_time_start || 0);
+                    return sum + (duration > 0 ? duration : 0);
+                }, 0);
+                const TOI_minutes = totalTOI / 60;
+                const OIL_per_min = TOI_minutes > 0 ? playerOIL / TOI_minutes : 0;
+                const bursts20_per60 = TOI_minutes > 0 ? (bursts20 / TOI_minutes) * 60 : 0;
+                const bursts22_per60 = TOI_minutes > 0 ? (bursts22 / TOI_minutes) * 60 : 0;
+                
+                // Calculate speed from position changes over time (since velocities are mostly NaN)
+                // Link tracking to events via sl_event_id to get timestamps
+                const trackingWithTime = [];
+                playerTracking.forEach(t => {
+                    // Find the event that matches this tracking point
+                    const matchingEvent = eventsData.find(e => 
+                        e.sl_event_id === t.sl_event_id && e.game_id === t.game_id
+                    );
+                    
+                    if (matchingEvent && matchingEvent.period_time !== null) {
+                        trackingWithTime.push({
+                            time: matchingEvent.period_time,
+                            x: t.tracking_x,
+                            y: t.tracking_y,
+                            vel_x: t.tracking_vel_x,
+                            vel_y: t.tracking_vel_y
+                        });
+                    }
+                });
+                
+                // Sort by time
+                trackingWithTime.sort((a, b) => a.time - b.time);
+                
+                // Calculate speeds from consecutive position changes
+                const speeds = [];
+                for (let i = 1; i < trackingWithTime.length; i++) {
+                    const prev = trackingWithTime[i - 1];
+                    const curr = trackingWithTime[i];
+                    
+                    const timeDiff = curr.time - prev.time;
+                    if (timeDiff > 0 && timeDiff < 10) {  // Only use if time diff is reasonable (< 10 seconds)
+                        const distance = Math.sqrt(
+                            Math.pow(curr.x - prev.x, 2) + 
+                            Math.pow(curr.y - prev.y, 2)
+                        );
+                        const speedFtPerSec = distance / timeDiff;
+                        const speedMPH = speedFtPerSec * 0.681818;  // Convert ft/s to MPH
+                        
+                        if (speedMPH > 0 && speedMPH < 30) {  // Filter unrealistic speeds
+                            speeds.push(speedMPH);
+                        }
+                    }
+                }
+                
+                const maxSpeed = speeds.length > 0 ? Math.max(...speeds) : 0;
+                
+                console.log(`Player ${player.player_name}: ${trackingWithTime.length} tracking points, max speed: ${maxSpeed.toFixed(2)} MPH`);
+                
+                const shotEvents = playerEvents.filter(e => 
+                    e.x_adj !== null && e.y_adj !== null && 
+                    (e.description?.includes('SHOT') || e.event_type === 'shot')
+                );
+                
+                let highDanger = 0, midRange = 0, longRange = 0;
+                let leftSide = 0, rightSide = 0, center = 0;
+                let shotDistances = [];
+                
+                shotEvents.forEach(shot => {
+                    const distToNet = Math.sqrt(Math.pow(89 - shot.x_adj, 2) + Math.pow(0 - shot.y_adj, 2));
+                    shotDistances.push(distToNet);
+                    
+                    if (distToNet < 30) highDanger++;
+                    else if (distToNet < 60) midRange++;
+                    else longRange++;
+                    
+                    if (shot.y_adj < -10) leftSide++;
+                    else if (shot.y_adj > 10) rightSide++;
+                    else center++;
+                });
+                
+                const strongSide = rightSide > leftSide ? 'Right' : leftSide > rightSide ? 'Left' : 'Center';
+                const strongSidePct = shotEvents.length > 0 ? Math.round((Math.max(leftSide, rightSide, center) / shotEvents.length) * 100) : 50;
+                const avgShotDistance = shotDistances.length > 0 ? shotDistances.reduce((a, b) => a + b, 0) / shotDistances.length : 40;
+                const attackLane = avgShotDistance < 35 ? 'Inside Lane (Slot)' : avgShotDistance < 50 ? 'High Slot' : 'Perimeter';
+                const shotReleaseZone = avgShotDistance < 35 ? 'Low Slot (15-30ft)' : avgShotDistance < 50 ? 'High Slot (30-45ft)' : 'Point (45+ft)';
+                
+                // team already declared at line 1201
+                
+                playerStats.set(player.player_id, {
+                    id: player.player_id,
+                    name: player.player_name,
+                    team: team,
+                    position: player.primary_position,
+                    positionGroup: player.position_group,
+                    handed: player.handed,
+                    shots: shots,
+                    percentile: percentile,
+                    defZone: hasZoneData ? ((defZoneCount / total) * 100).toFixed(1) : 'N/A',
+                    neutralZone: hasZoneData ? ((neutralCount / total) * 100).toFixed(1) : 'N/A',
+                    offZone: hasZoneData ? ((offZoneCount / total) * 100).toFixed(1) : 'N/A',
+                    hasTrackingData: hasZoneData,  // Track if player has any tracking
+                    highDanger: highDanger,
+                    midRange: midRange,
+                    longRange: longRange,
+                    playerLoad: playerOIL.toFixed(2),
+                    OIL_per_min: OIL_per_min.toFixed(3),
+                    TOI_minutes: TOI_minutes.toFixed(1),
+                    bursts20: bursts20,
+                    bursts22: bursts22,
+                    bursts20_per60: bursts20_per60.toFixed(1),
+                    bursts22_per60: bursts22_per60.toFixed(1),
+                    maxSpeed: maxSpeed > 0 ? maxSpeed.toFixed(2) : 'N/A',
+                    strongSide: strongSide,
+                    strongSidePct: strongSidePct,
+                    attackLane: attackLane,
+                    shotReleaseZone: shotReleaseZone,
+                    events: playerEvents,
+                    tracking: playerTracking
+                });
+            });
+            
+            processedPlayers = Array.from(playerStats.values());
+            
+            console.log('\n📊 Player Processing Summary:');
+            console.log(`   ✅ Successfully processed: ${playersProcessed} players`);
+            console.log(`   ❌ Excluded - No events: ${playersWithNoEvents}`);
+            console.log(`   ❌ Excluded - No team: ${playersWithNoTeam}`);
+            console.log(`   ⚠️  Included but no shots: ${playersWithNoShots}`);
+            console.log(`   📋 Final player list: ${processedPlayers.length} players`);
+            console.log(`   🔍 Missing: ${playersData.length - processedPlayers.length} players (${playersWithNoEvents + playersWithNoTeam} excluded)`);
+            
+            // Tracking coverage analysis
+            const playersWithTracking = processedPlayers.filter(p => {
+                const tracking = trackingData.filter(t => t.player_id === p.id);
+                return tracking.length > 0;
+            }).length;
+            
+            const playersWithoutTracking = processedPlayers.length - playersWithTracking;
+            
+            console.log('\n🎥 Tracking Data Coverage:');
+            console.log(`   ✅ Players with tracking: ${playersWithTracking}`);
+            console.log(`   ❌ Players without tracking: ${playersWithoutTracking}`);
+            console.log(`   📊 Coverage: ${((playersWithTracking / processedPlayers.length) * 100).toFixed(1)}%`);
+            
+            // Calculate real percentiles by comparing players
+            console.log(`📊 Calculating percentiles for ${processedPlayers.length} players...`);
+            
+            // Calculate percentile for each metric
+            processedPlayers.forEach(player => {
+                // Total shots percentile
+                const playersWithFewerShots = processedPlayers.filter(p => p.shots < player.shots).length;
+                player.percentile = Math.round((playersWithFewerShots / processedPlayers.length) * 100);
+                
+                // High-danger shots percentile
+                const playersWithFewerHD = processedPlayers.filter(p => p.highDanger < player.highDanger).length;
+                player.hdPercentile = Math.round((playersWithFewerHD / processedPlayers.length) * 100);
+                
+                // Mid-range shots percentile
+                const playersWithFewerMD = processedPlayers.filter(p => p.midRange < player.midRange).length;
+                player.mdPercentile = Math.round((playersWithFewerMD / processedPlayers.length) * 100);
+                
+                // Long-range shots percentile
+                const playersWithFewerLD = processedPlayers.filter(p => p.longRange < player.longRange).length;
+                player.ldPercentile = Math.round((playersWithFewerLD / processedPlayers.length) * 100);
+            });
+            
+            console.log(`✅ Processed ${processedPlayers.length} players successfully`);
+            } catch (error) {
+                console.error('❌ Error processing player data:', error);
+                processedPlayers = [];
+            }
+        }
+
+        function init() {
+            if (processedPlayers.length === 0) {
+                document.getElementById('player-list').innerHTML = '<div style="padding: 20px; text-align: center; color: #7a8a9e;">No data loaded</div>';
+                return;
+            }
+            
+            availableTeams = ['all', ...new Set(processedPlayers.map(p => p.team))];
+            console.log(`📋 Available teams (${availableTeams.length}):`, availableTeams);
+            
+            // Get unique games from events
+            availableGames = ['all', ...new Set(eventsData.map(e => e.game_id))];
+            console.log(`🏒 Available games (${availableGames.length - 1}):`, availableGames.length - 1);
+            
+            populateTeamSelector();
+            populateGameSelector();
+            renderPlayerList();
+            setupEventListeners();
+        }
+        
+        function populateGameSelector() {
+            const selector = document.getElementById('game-selector');
+            selector.innerHTML = '';
+            
+            availableGames.forEach((gameId, index) => {
+                const option = document.createElement('option');
+                option.value = gameId;
+                if (gameId === 'all') {
+                    option.textContent = 'All Games';
+                } else {
+                    // Find game info from gamesData to get home vs away teams
+                    const gameInfo = gamesData.find(g => g.game_id === gameId);
+                    
+                    if (gameInfo && gameInfo.home_team && gameInfo.away_team) {
+                        option.textContent = `${gameInfo.home_team} vs. ${gameInfo.away_team}`;
+                    } else {
+                        // Fallback: try to find teams from events in this game
+                        const gameEvents = eventsData.filter(e => e.game_id === gameId);
+                        const teams = [...new Set(gameEvents.map(e => e.team))].filter(t => t);
+                        
+                        if (teams.length >= 2) {
+                            option.textContent = `${teams[0]} vs. ${teams[1]}`;
+                        } else {
+                            option.textContent = `Game ${index}`;
+                        }
+                    }
+                }
+                selector.appendChild(option);
+            });
+        }
+
+        function populateTeamSelector() {
+            const selector = document.getElementById('team-lineup-selector');
+            selector.innerHTML = '';
+            availableTeams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team;
+                option.textContent = team === 'all' ? 'All Teams' : team;
+                selector.appendChild(option);
+            });
+        }
+
+
+        function renderPlayerList() {
+            const playerList = document.getElementById('player-list');
+            playerList.innerHTML = '';
+
+            const filtered = processedPlayers.filter(player => {
+                // Exclude players without valid team
+                if (!player.team || player.team === 'N/A' || player.team === 'Unknown') {
+                    return false;
+                }
+                
+                const positionMatch = filters.position === 'all' || 
+                    (filters.position === 'F' && player.positionGroup === 'F') ||
+                    (filters.position === 'D' && player.positionGroup === 'D');
+                const teamMatch = filters.team === 'all' || player.team === filters.team;
+                const searchMatch = player.name.toLowerCase().includes(filters.search.toLowerCase());
+                
+                // Game filter - check if player has events in this game
+                let gameMatch = filters.game === 'all';
+                if (!gameMatch && player.events) {
+                    gameMatch = player.events.some(e => e.game_id === filters.game);
+                }
+                
+                return positionMatch && teamMatch && searchMatch && gameMatch;
+            });
+
+            if (filtered.length === 0) {
+                playerList.innerHTML = '<div style="padding: 20px; text-align: center; color: #7a8a9e;">No players match filters</div>';
+                return;
+            }
+
+            filtered.forEach(player => {
+                const item = document.createElement('div');
+                item.className = 'player-item' + (currentPlayer && player.id === currentPlayer.id ? ' active' : '');
+                item.style.display = 'flex';
+                item.style.justifyContent = 'space-between';
+                item.style.alignItems = 'center';
+                
+                const playerInfo = document.createElement('div');
+                playerInfo.style.flex = '1';
+                playerInfo.innerHTML = `
+                    <div class="player-name">${player.name}</div>
+                    <div class="player-meta">
+                        <span>${player.team} • ${player.position}</span>
+                        <span class="player-stat">${player.shots} shots</span>
+                    </div>
+                `;
+                playerInfo.addEventListener('click', () => selectPlayer(player));
+                
+                const downloadBtn = document.createElement('button');
+                downloadBtn.innerHTML = '📄';
+                downloadBtn.style.cssText = `
+                    background: #1a2f47;
+                    border: 1px solid #2a4a6f;
+                    border-radius: 6px;
+                    color: #d4af37;
+                    font-size: 18px;
+                    width: 36px;
+                    height: 36px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    flex-shrink: 0;
+                `;
+                downloadBtn.title = 'Download Individual Scouting Report';
+                downloadBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Don't trigger player selection
+                    generateIndividualReport(player);
+                });
+                downloadBtn.addEventListener('mouseenter', function() {
+                    this.style.background = '#2a4a6f';
+                    this.style.borderColor = '#d4af37';
+                    this.style.transform = 'scale(1.1)';
+                });
+                downloadBtn.addEventListener('mouseleave', function() {
+                    this.style.background = '#1a2f47';
+                    this.style.borderColor = '#2a4a6f';
+                    this.style.transform = 'scale(1)';
+                });
+                
+                item.appendChild(playerInfo);
+                item.appendChild(downloadBtn);
+                playerList.appendChild(item);
+            });
+        }
+
+        function selectPlayer(player) {
+            currentPlayer = player;
+            
+            document.getElementById('player-placeholder').style.display = 'none';
+            document.getElementById('replay-interface').style.display = 'flex';
+            document.getElementById('scouting-placeholder').style.display = 'none';
+            document.getElementById('scouting-content').style.display = 'block';
+            document.getElementById('download-report-btn').style.display = 'block';
+            
+            document.getElementById('selected-player-name').textContent = player.name;
+            document.getElementById('selected-player-info').textContent = `${player.team} • ${player.position} • ${player.shots} shots across all periods`;
+            
+            loadPlayerShots();
+            updatePlayerStats();
+            renderPlayerList();
+        }
+
+        function loadPlayerShots() {
+            if (!currentPlayer || !currentPlayer.events) {
+                playerShots = [];
+                return;
+            }
+            
+            playerShots = currentPlayer.events
+                .filter(e => 
+                    (e.description?.includes('SHOT') || e.event_type === 'shot') &&
+                    e.x_adj !== null && e.y_adj !== null &&
+                    e.period !== null && e.period_time !== null &&
+                    (filters.game === 'all' || e.game_id === filters.game)  // Filter by selected game
+                )
+                .map((shot, index) => ({
+                    ...shot,
+                    shotIndex: index,
+                    distToNet: Math.sqrt(Math.pow(89 - shot.x_adj, 2) + Math.pow(0 - shot.y_adj, 2))
+                }))
+                .sort((a, b) => {
+                    if (a.period !== b.period) return a.period - b.period;
+                    return a.period_time - b.period_time;
+                });
+            
+            populateShotSelector();
+            
+            if (playerShots.length > 0) {
+                selectShot(0);
+            }
+        }
+
+        function populateShotSelector() {
+            const selector = document.getElementById('shot-selector');
+            const timeline = document.getElementById('shot-timeline');
+            
+            selector.innerHTML = '<option value="">Choose a shot...</option>';
+            
+            if (playerShots.length === 0) {
+                timeline.max = 0;
+                timeline.disabled = true;
+                return;
+            }
+            
+            const shotsByPeriod = {};
+            playerShots.forEach((shot, index) => {
+                const period = shot.period || 1;
+                if (!shotsByPeriod[period]) shotsByPeriod[period] = [];
+                shotsByPeriod[period].push({ shot, index });
+            });
+            
+            Object.keys(shotsByPeriod).sort((a, b) => a - b).forEach(period => {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = `Period ${period}`;
+                
+                shotsByPeriod[period].forEach(({ shot, index }) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    const time = formatTime(shot.period_time);
+                    const danger = shot.distToNet < 30 ? 'HD' : shot.distToNet < 60 ? 'MD' : 'LD';
+                    const outcome = shot.outcome === 'goal' ? 'GOAL' : shot.outcome === 'successful' ? '✓' : '✗';
+                    
+                    // Get game matchup
+                    let gameMatchup = '';
+                    if (shot.game_id) {
+                        const gameInfo = gamesData.find(g => g.game_id === shot.game_id);
+                        if (gameInfo && gameInfo.home_team && gameInfo.away_team) {
+                            gameMatchup = ` - ${gameInfo.home_team} vs. ${gameInfo.away_team}`;
+                        } else {
+                            // Fallback: find teams from events
+                            const gameEvents = eventsData.filter(e => e.game_id === shot.game_id);
+                            const teams = [...new Set(gameEvents.map(e => e.team))].filter(t => t).slice(0, 2);
+                            if (teams.length === 2) {
+                                gameMatchup = ` - ${teams[0]} vs. ${teams[1]}`;
+                            }
+                        }
+                    }
+                    
+                    option.textContent = `${time} - ${danger} ${outcome} (${shot.distToNet.toFixed(1)}ft)${gameMatchup}`;
+                    optgroup.appendChild(option);
+                });
+                
+                selector.appendChild(optgroup);
+            });
+            
+            timeline.max = playerShots.length - 1;
+            timeline.disabled = false;
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function selectShot(shotIndex) {
+            if (shotIndex < 0 || shotIndex >= playerShots.length) return;
+            
+            currentShot = playerShots[shotIndex];
+            currentReplayTime = -5;
+            stopAnimation();
+            
+            document.getElementById('shot-period').textContent = `P${currentShot.period}`;
+            document.getElementById('shot-time').textContent = formatTime(currentShot.period_time);
+            document.getElementById('shot-score').textContent = '0-0';
+            
+            // Enhanced outcome display with shot type from description
+            const shotDescription = currentShot.description || '';
+            const isGoal = currentShot.outcome === 'goal';
+            const outcome = isGoal ? '🚨 GOAL' : 
+                           currentShot.outcome === 'successful' ? '✓ On Net' : '✗ Missed';
+            
+            // Show description if it contains useful info
+            const shotTypeInfo = shotDescription.includes('SHOT') ? shotDescription : `${shotDescription} - SHOT`;
+            
+            const outcomeEl = document.getElementById('shot-outcome');
+            outcomeEl.textContent = outcome;
+            outcomeEl.style.color = '#ffffff';  /* White (reverted) */
+            outcomeEl.style.fontWeight = isGoal ? '700' : '400';
+            document.getElementById('shot-outcome').title = shotTypeInfo;  // Full description on hover
+            document.getElementById('shot-distance').textContent = currentShot.distToNet.toFixed(1) + ' ft';
+            
+            // Display EPV for this shot's possession/sequence
+            if (currentShot.sequence_id && currentShot.game_id) {
+                const linkId = currentShot.game_id + '_SEQ' + currentShot.sequence_id;
+                const possessionEPV = getEPVForPossession(linkId);
+                
+                console.log('🎯 Looking for EPV:', linkId, '→', possessionEPV);
+                
+                if (possessionEPV !== null && possessionEPV !== undefined) {
+                    document.getElementById('shot-xt').textContent = possessionEPV.toFixed(3);
+                    document.getElementById('xt-value-display').style.display = 'inline';
+                } else {
+                    console.warn('⚠️ No EPV found for possession:', linkId);
+                    document.getElementById('xt-value-display').style.display = 'none';
+                }
+            } else {
+                console.warn('⚠️ Shot missing sequence_id or game_id');
+                document.getElementById('xt-value-display').style.display = 'none';
+            }
+            
+            document.getElementById('shot-selector').value = shotIndex;
+            document.getElementById('shot-timeline').value = shotIndex;
+            
+            prepareReplayData();
+            
+            // Update duration display based on actual replay duration
+            if (replayData) {
+                const durationText = replayData.actualDuration.toFixed(1) + 's';
+                document.getElementById('replay-duration-display').textContent = durationText;
+                
+                if (replayData.playStoppedAt) {
+                    document.getElementById('replay-duration-display').innerHTML = 
+                        `${durationText} <span style="color: #ff6b6b; font-size: 10px;">(stopped)</span>`;
+                }
+            }
+            
+            document.getElementById('animation-controls').style.display = 'block';
+            renderReplayFrame();
+        }
+
+        function prepareReplayData() {
+            if (!currentShot) return;
+            
+            const shotTime = currentShot.period_time;
+            const shotPeriod = currentShot.period;
+            const gameId = currentShot.game_id;
+            const shotEventId = currentShot.sl_event_id;
+            
+            console.log('🎯 Preparing replay for shot:', {
+                game: gameId,
+                period: shotPeriod,
+                time: shotTime,
+                eventId: shotEventId
+            });
+            
+            // Initial time window: [shotTime - 5, shotTime + 3]
+            const startTime = shotTime - 5;
+            let endTime = shotTime + 3;
+            let playStoppedAt = null;
+            
+            // Check if there's a faceoff (whistle/stoppage) OR goal after the shot
+            const eventsAfterShot = eventsData.filter(e =>
+                e.game_id === gameId &&
+                e.period === shotPeriod &&
+                e.period_time > shotTime &&
+                e.period_time <= shotTime + 3
+            ).sort((a, b) => a.period_time - b.period_time);
+            
+            // Find first faceoff OR goal after shot (indicates play stoppage)
+            const nextStoppage = eventsAfterShot.find(e => 
+                e.event_type === 'faceoff' || 
+                e.description?.includes('FACE OFF') ||
+                e.description?.includes('Face-Off') ||
+                e.outcome === 'goal' ||
+                e.description?.includes('GOAL')
+            );
+            
+            let stoppageReason = null;
+            
+            if (nextStoppage) {
+                endTime = nextStoppage.period_time;
+                playStoppedAt = nextStoppage.period_time;
+                
+                // Determine why play stopped
+                if (nextStoppage.outcome === 'goal' || nextStoppage.description?.includes('GOAL')) {
+                    stoppageReason = 'GOAL';
+                    console.log(`🚨 GOAL scored at ${formatTime(playStoppedAt)} (${(playStoppedAt - shotTime).toFixed(1)}s after shot)`);
+                } else {
+                    stoppageReason = 'WHISTLE';
+                    console.log(`🛑 Play stopped at faceoff: ${formatTime(playStoppedAt)} (${(playStoppedAt - shotTime).toFixed(1)}s after shot)`);
+                }
+            } else {
+                console.log(`✅ No stoppage found - full 3-second window available`);
+            }
+            
+            const actualDuration = endTime - startTime;
+            console.log(`⏱️ Replay duration: ${actualDuration.toFixed(1)} seconds (${startTime.toFixed(1)}s to ${endTime.toFixed(1)}s)`);
+            
+            // Get players on ice from stints data
+            const playersOnIce = stintsData.filter(stint => 
+                stint.game_id === gameId &&
+                stint.period === shotPeriod &&
+                stint.period_time_start <= shotTime &&
+                stint.period_time_end >= shotTime
+            );
+            
+            console.log(`👥 Found ${playersOnIce.length} players on ice from stints`);
+            
+            // Get all events in the time window for context
+            const windowEvents = eventsData.filter(e =>
+                e.game_id === gameId &&
+                e.period === shotPeriod &&
+                e.period_time >= startTime &&
+                e.period_time <= endTime
+            ).sort((a, b) => a.period_time - b.period_time);
+            
+            console.log(`📋 Found ${windowEvents.length} events in 8-second window`);
+            
+            // For each event, get its tracking data
+            const eventTrackingMap = new Map();
+            windowEvents.forEach(event => {
+                const eventTracking = trackingData.filter(t => 
+                    t.game_id === gameId &&
+                    t.sl_event_id === event.sl_event_id
+                );
+                
+                if (eventTracking.length > 0) {
+                    eventTrackingMap.set(event.sl_event_id, eventTracking);
+                }
+            });
+            
+            console.log(`🎥 Found tracking data for ${eventTrackingMap.size} events`);
+            
+            // Build player positions from tracking data
+            const playerPositionsMap = new Map();
+            
+            windowEvents.forEach(event => {
+                const tracking = eventTrackingMap.get(event.sl_event_id);
+                if (!tracking) return;
+                
+                tracking.forEach(t => {
+                    if (!t.player_id) return;
+                    
+                    if (!playerPositionsMap.has(t.player_id)) {
+                        playerPositionsMap.set(t.player_id, {
+                            player_id: t.player_id,
+                            player_name: t.player_name,
+                            team: t.team_name,
+                            team_id: t.team_id,  // Store team_id for proper identification
+                            snapshots: []
+                        });
+                    }
+                    
+                    playerPositionsMap.get(t.player_id).snapshots.push({
+                        time: event.period_time,
+                        x: t.tracking_x,
+                        y: t.tracking_y,
+                        event_id: event.sl_event_id,
+                        has_puck: event.player_id === t.player_id  // Player has puck if they triggered the event
+                    });
+                });
+            });
+            
+            // Build player list with interpolated positions
+            const players = [];
+            
+            playerPositionsMap.forEach((playerData, playerId) => {
+                const isShooter = playerId === currentShot.player_id;
+                
+                // Use team_id for proper team identification (more reliable than team name)
+                // Compare team_id if available, fallback to team name
+                const playerTeamId = playerData.team_id || playerData.team;
+                const shooterTeamId = currentShot.team_id || currentShot.team;
+                const isShooterTeam = playerTeamId === shooterTeamId;
+                
+                const color = isShooterTeam ? '#ff8844' : '#4488ff';  // Orange for offense, Blue for defense
+                
+                players.push({
+                    id: playerId,
+                    name: playerData.player_name,
+                    team: playerData.team,
+                    team_id: playerTeamId,
+                    color: color,
+                    isShooter: isShooter,
+                    positions: interpolateFromSnapshots(playerData.snapshots, startTime, endTime, shotTime)
+                });
+            });
+            
+            console.log(`✅ Built ${players.length} player tracks for animation`);
+            console.log(`   Shooter team: ${currentShot.team}, Opponent: ${currentShot.opp_team}`);
+            
+            // Don't add estimated players - only show those with real tracking data
+            // Count how many players are missing from computer vision
+            const totalPlayersOnIce = playersOnIce.length;
+            const playersWithTracking = players.length;
+            const missingPlayers = totalPlayersOnIce - playersWithTracking;
+            
+            console.log(`📊 Players: ${playersWithTracking} tracked, ${missingPlayers} not in computer vision`);
+            
+            // Assign player numbers (1=G, 2-3=D, 4-6=F) for both teams
+            const offensivePlayers = players.filter(p => p.team_id === (currentShot.team_id || currentShot.team));
+            const defensivePlayers = players.filter(p => p.team_id !== (currentShot.team_id || currentShot.team));
+            
+            const numberedOffensive = assignPlayerNumbers(offensivePlayers);
+            const numberedDefensive = assignPlayerNumbers(defensivePlayers);
+            const allNumberedPlayers = [...numberedOffensive, ...numberedDefensive];
+            
+            replayData = {
+                shot: currentShot,
+                startTime: startTime,
+                endTime: endTime,
+                actualDuration: actualDuration,
+                playStoppedAt: playStoppedAt,
+                stoppageReason: stoppageReason,  // 'GOAL', 'WHISTLE', or null
+                duration: actualDuration,  // Use actual duration (may be less than 8 if faceoff)
+                shotTime: shotTime,
+                players: allNumberedPlayers,  // Now includes .number field
+                playersOnIce: playersOnIce,
+                playersWithTracking: playersWithTracking,
+                missingPlayers: missingPlayers,
+                sequenceEvents: windowEvents
+            };
+            
+            // Build and display sequence timeline
+            buildSequenceTimeline();
+        }
+        
+        // Build sequence timeline visualization
+        function buildSequenceTimeline() {
+            if (!replayData || !replayData.sequenceEvents) return;
+            
+            const sequenceContainer = document.getElementById('sequence-events');
+            const timelineDiv = document.getElementById('sequence-timeline');
+            const countSpan = document.getElementById('sequence-count');
+            
+            const shotTime = currentShot.period_time;
+            const shooterTeam = currentShot.team;
+            
+            // Get events in the 8-SECOND WINDOW ONLY (5 sec before, 3 sec after)
+            const startTime = shotTime - 5;
+            const endTime = shotTime + 3;
+            
+            const sequenceEvents = eventsData.filter(e => 
+                e.game_id === currentShot.game_id &&
+                e.period === currentShot.period &&
+                e.team === shooterTeam &&  // ONLY shooter's team
+                e.period_time >= startTime &&  // 5 seconds before
+                e.period_time <= endTime  // 3 seconds after
+            ).sort((a, b) => a.period_time - b.period_time);
+            
+            console.log(`📋 8-second window (${shooterTeam} only): ${sequenceEvents.length} events from ${formatTime(startTime)} to ${formatTime(endTime)}`);
+            
+            if (sequenceEvents.length === 0) {
+                timelineDiv.style.display = 'none';
+                return;
+            }
+            
+            sequenceContainer.innerHTML = '';
+            timelineDiv.style.display = 'block';
+            countSpan.textContent = `${sequenceEvents.length} events in 8-sec window • ${shooterTeam} offensive play`;
+            
+            // Add EPV to timeline header if available
+            const linkId = currentShot.game_id + '_SEQ' + currentShot.sequence_id;
+            const possessionEPV = getEPVForPossession(linkId);
+            
+            if (possessionEPV !== null) {
+                countSpan.textContent += ` • EPV: ${possessionEPV.toFixed(3)}`;
+            }
+            
+            // Create event cards
+            sequenceEvents.forEach((event, index) => {
+                const isCurrentShot = event.sl_event_id === currentShot.sl_event_id;
+                
+                const eventCard = document.createElement('div');
+                eventCard.className = 'sequence-event' + (isCurrentShot ? ' shot-event' : '');
+                
+                const time = formatTime(event.period_time);
+                const player = event.player_name || 'Unknown';
+                const eventType = event.description || event.event_type || 'Event';
+                const outcome = event.outcome || '';
+                
+                // Calculate time relative to shot
+                const relativeTime = event.period_time - shotTime;
+                const relativeLabel = relativeTime < -0.5 ? `${relativeTime.toFixed(1)}s` : 
+                                     relativeTime > 0.5 ? `+${relativeTime.toFixed(1)}s` : 'SHOT';
+                
+                // Determine outcome class
+                let outcomeClass = '';
+                if (outcome === 'successful') outcomeClass = 'successful';
+                else if (outcome === 'failed') outcomeClass = 'failed';
+                
+                eventCard.innerHTML = `
+                    <div class="sequence-time">${time} <span style="font-size: 9px; color: ${isCurrentShot ? '#0a1628' : '#7a8a9e'};">(${relativeLabel})</span></div>
+                    <div class="sequence-player">${player}</div>
+                    <div class="sequence-event-type">${eventType}</div>
+                    ${outcome ? `<div class="sequence-outcome ${outcomeClass}">${outcome}</div>` : ''}
+                `;
+                
+                // Add arrow between events (except last)
+                sequenceContainer.appendChild(eventCard);
+                
+                if (index < sequenceEvents.length - 1) {
+                    const arrow = document.createElement('div');
+                    arrow.style.cssText = 'display: flex; align-items: center; color: #d4af37; font-size: 20px; flex-shrink: 0;';
+                    arrow.textContent = '→';
+                    sequenceContainer.appendChild(arrow);
+                }
+            });
+        }
+        
+        // Interpolate player positions from tracking snapshots
+        function interpolateFromSnapshots(snapshots, startTime, endTime, shotTime) {
+            const positions = [];
+            const actualDuration = endTime - startTime;
+            const numFrames = 81;
+            
+            // Sort snapshots by time
+            snapshots.sort((a, b) => a.time - b.time);
+            
+            for (let frame = 0; frame < numFrames; frame++) {
+                // Use actual duration instead of fixed 8 seconds
+                const timeOffset = -5 + (frame / (numFrames - 1)) * actualDuration;
+                const absoluteTime = shotTime + timeOffset;
+                
+                // Find closest snapshots before and after this time
+                let before = null;
+                let after = null;
+                
+                for (let i = 0; i < snapshots.length; i++) {
+                    if (snapshots[i].time <= absoluteTime) {
+                        before = snapshots[i];
+                    }
+                    if (snapshots[i].time >= absoluteTime && !after) {
+                        after = snapshots[i];
+                        break;
+                    }
+                }
+                
+                let x, y, hasPuck = false;
+                
+                if (before && after && before.time !== after.time) {
+                    // Interpolate between snapshots
+                    const t = (absoluteTime - before.time) / (after.time - before.time);
+                    x = before.x + (after.x - before.x) * t;
+                    y = before.y + (after.y - before.y) * t;
+                    hasPuck = before.has_puck || after.has_puck;
+                } else if (before) {
+                    x = before.x;
+                    y = before.y;
+                    hasPuck = before.has_puck;
+                } else if (after) {
+                    x = after.x;
+                    y = after.y;
+                    hasPuck = after.has_puck;
+                } else {
+                    // No tracking data for this player in this window
+                    x = 0;
+                    y = 0;
+                }
+                
+                positions.push({ 
+                    time: timeOffset, 
+                    x: x, 
+                    y: y,
+                    hasPuck: hasPuck
+                });
+            }
+            
+            return positions;
+        }
+        
+        // Note: generateEstimatedPath removed - we only show players with actual tracking data
+        
+        function renderReplayFrame() {
+            if (!currentShot || !replayData) return;
+            
+            const svg = d3.select('#rink-svg');
+            svg.selectAll('*').remove();
+
+            const width = 900;
+            const height = 520;
+            const rinkWidth = 800;
+            const rinkHeight = 400;
+            const margin = { top: 60, right: 50, bottom: 60, left: 50 };
+
+            svg.attr('width', width).attr('height', height).attr('viewBox', `0 0 ${width} ${height}`);
+
+            const g = svg.append('g').attr('transform', `translate(${margin.left}, ${margin.top})`);
+
+            drawRink(g, rinkWidth, rinkHeight);
+            
+            const xScale = d3.scaleLinear().domain([-100, 100]).range([0, rinkWidth]);
+            const yScale = d3.scaleLinear().domain([-42.5, 42.5]).range([rinkHeight, 0]);
+            
+            // Use actual duration (may be less than 8 if faceoff occurred)
+            const frameIndex = Math.floor(((currentReplayTime + 5) / replayData.actualDuration) * 80);
+            const clampedFrame = Math.max(0, Math.min(80, frameIndex));
+            
+            // Draw trails
+            replayData.players.forEach(player => {
+                const trailStart = Math.max(0, clampedFrame - 10);
+                const trailFrames = player.positions.slice(trailStart, clampedFrame + 1);
+                
+                if (trailFrames.length > 1) {
+                    const line = d3.line()
+                        .x(d => xScale(d.x))
+                        .y(d => yScale(d.y))
+                        .curve(d3.curveCardinal);
+                    
+                    g.append('path')
+                        .datum(trailFrames)
+                        .attr('class', 'player-trail')
+                        .attr('d', line)
+                        .attr('stroke', player.color)
+                        .attr('stroke-width', player.isShooter ? 3 : 2);
+                }
+            });
+            
+            // Draw players
+            replayData.players.forEach(player => {
+                const pos = player.positions[clampedFrame];
+                if (!pos || (pos.x === 0 && pos.y === 0)) return;  // Skip if no position data
+                
+                // ONLY the shooter gets gold, everyone else gets team color
+                const isShooterNow = player.isShooter;
+                const playerColor = isShooterNow ? '#d4af37' : player.color;
+                const hasPuck = pos.hasPuck && !isShooterNow;  // Track puck for non-shooters
+                
+                const playerG = g.append('g').attr('class', 'player-dot' + (isShooterNow ? ' shooter' : ''));
+                
+                // Player circle
+                playerG.append('circle')
+                    .attr('cx', xScale(pos.x))
+                    .attr('cy', yScale(pos.y))
+                    .attr('r', isShooterNow ? 12 : (hasPuck ? 10 : 8))
+                    .attr('fill', playerColor)
+                    .attr('stroke', '#ffffff')
+                    .attr('stroke-width', isShooterNow ? 3 : 2)
+                    .attr('opacity', 0.95)
+                    .append('title')
+                    .text(player.name + (isShooterNow ? ' (SHOOTER)' : hasPuck ? ' (PUCK)' : ''));
+                
+                // Player label - show position-based number (1=G, 2-3=D, 4-6=F)
+                let playerLabel = '';
+                if (isShooterNow) {
+                    playerLabel = '⭐';  // Shooter gets star
+                } else if (player.number) {
+                    playerLabel = player.number.toString();  // Use assigned number
+                } else {
+                    playerLabel = player.color === '#ff8844' ? 'O' : 'D';  // Fallback
+                }
+                
+                playerG.append('text')
+                    .attr('x', xScale(pos.x))
+                    .attr('y', yScale(pos.y) + 4)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-family', 'Space Mono, monospace')
+                    .attr('font-size', isShooterNow ? '14px' : '12px')
+                    .attr('font-weight', '700')
+                    .attr('fill', isShooterNow ? '#0a1628' : '#ffffff')
+                    .text(playerLabel);
+            });
+            
+            // Shot marker - appears at shot time (t=0) and persists
+            if (currentReplayTime >= -0.1) {
+                const shotG = g.append('g').attr('class', 'shot-marker');
+                
+                // Pulsing ring around shot location
+                shotG.append('circle')
+                    .attr('cx', xScale(currentShot.x))
+                    .attr('cy', yScale(currentShot.y))
+                    .attr('r', 12)
+                    .attr('fill', 'none')
+                    .attr('stroke', '#ff0000')
+                    .attr('stroke-width', 4);
+                
+                // Shot location dot
+                shotG.append('circle')
+                    .attr('cx', xScale(currentShot.x))
+                    .attr('cy', yScale(currentShot.y))
+                    .attr('r', 6)
+                    .attr('fill', '#ff0000');
+                
+                // Shot trajectory line to net
+                const targetNetX = currentShot.x > 0 ? 89 : -89;
+                
+                g.append('line')
+                    .attr('x1', xScale(currentShot.x))
+                    .attr('y1', yScale(currentShot.y))
+                    .attr('x2', xScale(targetNetX))
+                    .attr('y2', yScale(0))
+                    .attr('stroke', '#ff0000')
+                    .attr('stroke-width', 3)
+                    .attr('stroke-dasharray', '8,4')
+                    .attr('opacity', 0.7);
+                    
+                // Add "SHOT!" label
+                g.append('text')
+                    .attr('x', xScale(currentShot.x))
+                    .attr('y', yScale(currentShot.y) - 20)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-family', 'DM Sans, sans-serif')
+                    .attr('font-size', '14px')
+                    .attr('font-weight', '700')
+                    .attr('fill', '#ff0000')
+                    .text('SHOT!');
+            }
+            
+            document.getElementById('replay-time-display').textContent = currentReplayTime.toFixed(1) + 's';
+            
+            // Update timeline based on actual duration
+            const timelinePercent = ((currentReplayTime + 5) / replayData.actualDuration) * 100;
+            document.getElementById('replay-timeline').value = Math.min(100, Math.max(0, timelinePercent));
+            
+            // Show stoppage marker if play ended early
+            if (replayData.playStoppedAt) {
+                const stoppageTime = replayData.playStoppedAt - replayData.shotTime;
+                const stoppagePercent = ((stoppageTime + 5) / replayData.actualDuration) * 100;
+                
+                // Draw vertical line at stoppage point on rink
+                const xScale = d3.scaleLinear().domain([-100, 100]).range([0, rinkWidth]);
+                const yScale = d3.scaleLinear().domain([-42.5, 42.5]).range([rinkHeight, 0]);
+                
+                if (currentReplayTime >= stoppageTime - 0.5) {
+                    // Show different message based on stoppage reason
+                    const message = replayData.stoppageReason === 'GOAL' ? '🚨 GOAL SCORED!' : '🛑 WHISTLE - PLAY STOPPED';
+                    const color = replayData.stoppageReason === 'GOAL' ? '#4ade80' : '#ff6b6b';  /* Green for goals (reverted) */
+                    
+                    g.append('text')
+                        .attr('x', rinkWidth / 2)
+                        .attr('y', 40)
+                        .attr('text-anchor', 'middle')
+                        .attr('font-family', 'DM Sans, sans-serif')
+                        .attr('font-size', '18px')
+                        .attr('font-weight', '700')
+                        .attr('fill', color)
+                        .text(message);
+                }
+            }
+            
+            updatePlayersOnIce();
+        }
+
+        function drawRink(g, rinkWidth, rinkHeight) {
+            // Rink outline
+            g.append('rect').attr('x', 0).attr('y', 0).attr('width', rinkWidth).attr('height', rinkHeight)
+                .attr('rx', 80).attr('fill', '#f5f5f5').attr('stroke', '#000000').attr('stroke-width', 3);
+
+            // Create scale for proper positioning
+            // x_adj ranges from -100 to 100, map to rink width
+            const xScale = d3.scaleLinear().domain([-100, 100]).range([0, rinkWidth]);
+            
+            // Blue lines at x = -25 and x = +25 (NOT percentages!)
+            const blueLineLeft = xScale(-25);  // Left blue line at -25 feet
+            const blueLineRight = xScale(25);   // Right blue line at +25 feet
+            
+            [blueLineLeft, blueLineRight].forEach(x => {
+                g.append('line').attr('x1', x).attr('y1', 0).attr('x2', x).attr('y2', rinkHeight)
+                    .attr('stroke', '#0066cc').attr('stroke-width', 4);
+            });
+
+            // Center red line at x = 0
+            const centerLine = xScale(0);
+            g.append('line').attr('x1', centerLine).attr('y1', 0).attr('x2', centerLine).attr('y2', rinkHeight)
+                .attr('stroke', '#cc0000').attr('stroke-width', 4);
+
+            // Center circle at x = 0
+            g.append('circle').attr('cx', centerLine).attr('cy', rinkHeight / 2).attr('r', 60)
+                .attr('fill', 'none').attr('stroke', '#0066cc').attr('stroke-width', 2);
+            
+            g.append('circle').attr('cx', centerLine).attr('cy', rinkHeight / 2).attr('r', 4).attr('fill', '#cc0000');
+
+            // Faceoff circles at proper positions
+            // Defensive zone: around x = -69, Offensive zone: around x = +69
+            const faceoffPositions = [
+                { x: xScale(-69), y: rinkHeight * 0.31 },  // Left defensive upper
+                { x: xScale(-69), y: rinkHeight * 0.69 },  // Left defensive lower
+                { x: xScale(69), y: rinkHeight * 0.31 },   // Right offensive upper
+                { x: xScale(69), y: rinkHeight * 0.69 }    // Right offensive lower
+            ];
+
+            faceoffPositions.forEach(pos => {
+                g.append('circle').attr('cx', pos.x).attr('cy', pos.y).attr('r', 60)
+                    .attr('fill', 'none').attr('stroke', '#cc0000').attr('stroke-width', 2);
+                g.append('circle').attr('cx', pos.x).attr('cy', pos.y).attr('r', 4).attr('fill', '#cc0000');
+                
+                [45, 135, 225, 315].forEach(angle => {
+                    const rad = (angle * Math.PI) / 180;
+                    const hashOffset = 68;
+                    const hashLength = 12;
+                    const baseX = pos.x + Math.cos(rad) * hashOffset;
+                    const baseY = pos.y + Math.sin(rad) * hashOffset;
+                    const perpRad = rad + Math.PI / 2;
+                    
+                    g.append('line')
+                        .attr('x1', baseX - Math.cos(perpRad) * hashLength / 2)
+                        .attr('y1', baseY - Math.sin(perpRad) * hashLength / 2)
+                        .attr('x2', baseX + Math.cos(perpRad) * hashLength / 2)
+                        .attr('y2', baseY + Math.sin(perpRad) * hashLength / 2)
+                        .attr('stroke', '#cc0000').attr('stroke-width', 2);
+                    
+                    g.append('line')
+                        .attr('x1', baseX).attr('y1', baseY)
+                        .attr('x2', baseX + Math.cos(rad) * hashLength)
+                        .attr('y2', baseY + Math.sin(rad) * hashLength)
+                        .attr('stroke', '#cc0000').attr('stroke-width', 2);
+                });
+            });
+
+            // Neutral zone dots at x = ±22
+            [[xScale(-22), rinkHeight * 0.31], [xScale(-22), rinkHeight * 0.69], 
+             [xScale(22), rinkHeight * 0.31], [xScale(22), rinkHeight * 0.69]].forEach(([x, y]) => {
+                g.append('circle').attr('cx', x).attr('cy', y).attr('r', 4).attr('fill', '#cc0000');
+            });
+
+            // Goal creases at x = -89 and x = +89
+            const creaseRadius = 24;
+            const goalY = rinkHeight / 2;
+            const leftGoalX = xScale(-89);
+            const rightGoalX = xScale(89);
+            
+            // Left goal
+            g.append('path')
+                .attr('d', `M ${leftGoalX} ${goalY - creaseRadius} A ${creaseRadius} ${creaseRadius} 0 0 1 ${leftGoalX} ${goalY + creaseRadius}`)
+                .attr('fill', '#b3d9ff').attr('stroke', '#cc0000').attr('stroke-width', 2);
+            g.append('line').attr('x1', leftGoalX).attr('y1', goalY - creaseRadius)
+                .attr('x2', leftGoalX).attr('y2', goalY + creaseRadius).attr('stroke', '#cc0000').attr('stroke-width', 2);
+            
+            // Right goal
+            g.append('path')
+                .attr('d', `M ${rightGoalX} ${goalY - creaseRadius} A ${creaseRadius} ${creaseRadius} 0 0 0 ${rightGoalX} ${goalY + creaseRadius}`)
+                .attr('fill', '#ffd9b3').attr('stroke', '#cc0000').attr('stroke-width', 2);
+            g.append('line').attr('x1', rightGoalX).attr('y1', goalY - creaseRadius)
+                .attr('x2', rightGoalX).attr('y2', goalY + creaseRadius).attr('stroke', '#cc0000').attr('stroke-width', 2);
+        }
+
+        function updatePlayersOnIce() {
+            if (!replayData) return;
+            
+            // Use actual stint data if available
+            if (replayData.playersOnIce && replayData.playersOnIce.length > 0) {
+                const offensivePlayers = replayData.playersOnIce.filter(p => p.team === replayData.shot.team);
+                const defensivePlayers = replayData.playersOnIce.filter(p => p.team !== replayData.shot.team);
+                
+                // Assign numbers to stint players for display
+                const numberedOffensive = assignPlayerNumbers(offensivePlayers);
+                const numberedDefensive = assignPlayerNumbers(defensivePlayers);
+                
+                // Build offensive player list with numbers and EPV
+                const offensiveHTML = numberedOffensive.map(p => {
+                    const epvStats = getPlayerEPVStats(p.player_id);
+                    const epvDisplay = epvStats.avg_delta_epv > 0 ? 
+                        `<span style="color: #4488ff; font-family: 'Space Mono', monospace; font-size: 11px; margin-left: 8px;">EPV: ${epvStats.avg_delta_epv.toFixed(3)}</span>` : 
+                        '';
+                    return `<span style="color: #d4af37; font-weight: 700; margin-right: 6px;">${p.number}</span>${p.player_name}${epvDisplay}`;
+                }).join('<br>');
+                
+                const defensiveHTML = numberedDefensive.map(p => {
+                    return `<span style="color: #4488ff; font-weight: 700; margin-right: 6px;">${p.number}</span>${p.player_name}`;
+                }).join('<br>');
+                
+                document.getElementById('offensive-players').innerHTML = offensiveHTML || 'N/A';
+                document.getElementById('defensive-players').innerHTML = defensiveHTML || 'N/A';
+            } else {
+                // Fallback to replay players (already numbered)
+                const offPlayers = replayData.players.filter(p => p.team === replayData.shot.team)
+                    .map(p => {
+                        const epvStats = getPlayerEPVStats(p.id);
+                        const epvDisplay = epvStats.avg_delta_epv > 0 ? 
+                            `<span style="color: #4488ff; font-family: 'Space Mono', monospace; font-size: 11px; margin-left: 8px;">EPV: ${epvStats.avg_delta_epv.toFixed(3)}</span>` : 
+                            '';
+                        return `<span style="color: #d4af37; font-weight: 700; margin-right: 6px;">${p.number || '?'}</span>${p.name}${epvDisplay}`;
+                    }).join('<br>');
+                
+                const defPlayers = replayData.players.filter(p => p.team !== replayData.shot.team)
+                    .map(p => `<span style="color: #4488ff; font-weight: 700; margin-right: 6px;">${p.number || '?'}</span>${p.name}`)
+                    .join('<br>');
+                
+                document.getElementById('offensive-players').innerHTML = offPlayers || 'N/A';
+                document.getElementById('defensive-players').innerHTML = defPlayers || 'N/A';
+            }
+            
+            // Show tracking status
+            const statusEl = document.getElementById('tracking-status');
+            if (replayData.missingPlayers > 0) {
+                statusEl.textContent = `⚠️ ${replayData.missingPlayers} player${replayData.missingPlayers > 1 ? 's' : ''} not visible (no computer vision data)`;
+                statusEl.style.display = 'block';
+            } else {
+                statusEl.textContent = `✅ All ${replayData.playersWithTracking} players tracked`;
+                statusEl.style.display = 'block';
+            }
+        }
+
+        function updatePlayerStats() {
+            if (!currentPlayer) return;
+            
+            document.getElementById('player-handed').textContent = `Shoots: ${currentPlayer.handed || '-'}`;
+            document.getElementById('player-position-detail').textContent = currentPlayer.position;
+            document.getElementById('total-shots').textContent = currentPlayer.shots;
+            document.getElementById('shots-percentile').style.width = currentPlayer.percentile + '%';
+            document.getElementById('shots-percentile-text').textContent = currentPlayer.percentile + 'th Percentile';
+            
+            const strongSideText = currentPlayer.handed === 'R' ? 'Right Wing' : currentPlayer.handed === 'L' ? 'Left Wing' : 'Center';
+            document.getElementById('strong-side-bias').textContent = `${currentPlayer.strongSidePct}% ${strongSideText}`;
+            document.getElementById('strong-side-bar').style.width = currentPlayer.strongSidePct + '%';
+            document.getElementById('attack-lane').textContent = currentPlayer.attackLane;
+            document.getElementById('shot-zone').textContent = currentPlayer.shotReleaseZone;
+            
+            document.getElementById('defensive-zone').textContent = currentPlayer.defZone === 'N/A' ? 'N/A' : currentPlayer.defZone + '%';
+            document.getElementById('neutral-zone').textContent = currentPlayer.neutralZone === 'N/A' ? 'N/A' : currentPlayer.neutralZone + '%';
+            document.getElementById('offensive-zone').textContent = currentPlayer.offZone === 'N/A' ? 'N/A' : currentPlayer.offZone + '%';
+            
+            // Show note if no tracking data
+            const zoneNote = document.getElementById('zone-time-note');
+            if (!currentPlayer.hasTrackingData) {
+                zoneNote.style.display = 'block';
+            } else {
+                zoneNote.style.display = 'none';
+            }
+            
+            // Update speed bursts
+            document.getElementById('bursts-20-total').textContent = currentPlayer.bursts20;
+            document.getElementById('bursts-20-per60').textContent = currentPlayer.bursts20_per60;
+            document.getElementById('bursts-22-total').textContent = currentPlayer.bursts22;
+            document.getElementById('bursts-22-per60').textContent = currentPlayer.bursts22_per60;
+            
+            // Update On-Ice Load
+            document.getElementById('oil-per-min').textContent = currentPlayer.OIL_per_min;
+            document.getElementById('oil-toi').textContent = currentPlayer.TOI_minutes;
+            document.getElementById('oil-total').textContent = currentPlayer.playerLoad;
+            
+            const oilValue = parseFloat(currentPlayer.OIL_per_min);
+            let oilAssessment;
+            
+            if (!Number.isFinite(oilValue) || currentPlayer.OIL_per_min === 'NaN') {
+                oilAssessment = 'No velocity data - cannot calculate load';
+            } else if (oilValue === 0) {
+                oilAssessment = 'No high-intensity accelerations detected (< 0.3 m/s²)';
+            } else if (oilValue > 2.0) {
+                oilAssessment = 'High workload - frequent acceleration changes';
+            } else if (oilValue > 1.0) {
+                oilAssessment = 'Moderate workload - average intensity';
+            } else {
+                oilAssessment = 'Low workload - limited high-intensity efforts';
+            }
+            
+            document.getElementById('oil-assessment').textContent = oilAssessment;
+            
+            const handedSide = currentPlayer.handed === 'R' ? 'right' : 'left';
+            document.getElementById('lateral-tactic').textContent = 
+                `Shade toward strong side (${handedSide}). ${currentPlayer.attackLane.includes('Inside') ? 'Cut off inside lane to force perimeter shots.' : 'Allow inside, pressure on perimeter.'}`;
+            
+            document.getElementById('depth-tactic').textContent = 
+                `Maintain 6-8 ft gap. Standard positioning on entries.`;
+            
+            // Key tendencies - only show if we have real indicators
+            const tendencies = [];
+            // Removed fake metrics - add real ones here when available
+            if (tendencies.length === 0) tendencies.push('• Standard coverage');
+            
+            document.getElementById('key-tendencies').innerHTML = tendencies.join('<br>');
+            
+            // Update EPV display
+            const epvStats = getPlayerEPVStats(currentPlayer.id);
+            const epvDisplay = document.getElementById('epv-display');
+            
+            if (epvStats.avg_delta_epv > 0) {
+                epvDisplay.innerHTML = `
+                    <div style="background: #152538; border: 2px solid #4488ff; border-radius: 8px; padding: 16px;">
+                        <!-- Light blue (reverted) -->
+                        <div style="font-size: 12px; color: #4488ff; font-weight: 600; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                            🎯 Expected Possession Value (EPV)
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+                            <div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 32px; font-weight: 700; color: #4488ff;">
+                                    ${epvStats.avg_delta_epv.toFixed(3)}
+                                </div>
+                                <div style="font-size: 11px; color: #7a8a9e;">Avg Δ EPV per Event</div>
+                            </div>
+                            <div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 32px; font-weight: 700; color: #d4af37;">
+                                    ${epvStats.epv_percentile}th
+                                </div>
+                                <div style="font-size: 11px; color: #7a8a9e;">Percentile Rank</div>
+                            </div>
+                        </div>
+                        <div style="font-size: 11px; color: #a8b8cc; margin-top: 8px;">
+                            ${epvStats.possessions} possessions • ${epvStats.total_delta_epv.toFixed(2)} total Δ EPV
+                        </div>
+                    </div>
+                `;
+            } else {
+                epvDisplay.innerHTML = `
+                    <div class="xt-placeholder">
+                        <div class="xt-placeholder-title">🎯 Expected Possession Value (EPV)</div>
+                        <div class="xt-placeholder-text">No EPV data available for this player</div>
+                    </div>
+                `;
+            }
+        }
+
+        // Generate Individual Player Scouting Report
+        function generateIndividualReport(player) {
+            const reportDiv = document.createElement('div');
+            reportDiv.className = 'print-report';
+            reportDiv.style.display = 'block';
+            
+            const today = new Date().toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            
+            // FULL SCOUTING REPORT with EPV
+            const epvStats = getPlayerEPVStats(player.id);
+            
+            // Get shot breakdown by period
+            const shotsByPeriod = { 1: 0, 2: 0, 3: 0 };
+            player.events.forEach(e => {
+                if ((e.description?.includes('SHOT') || e.event_type === 'shot') && e.period) {
+                    shotsByPeriod[e.period] = (shotsByPeriod[e.period] || 0) + 1;
+                }
+            });
+            
+            reportDiv.innerHTML = `
+                <div style="background: white; color: #000; padding: 40px; max-width: 8.5in; margin: 0 auto;">
+                    <!-- Header -->
+                    <div style="border-bottom: 4px solid #d4af37; padding-bottom: 20px; margin-bottom: 24px;">
+                        <h1 style="font-family: 'DM Sans', sans-serif; font-size: 32px; font-weight: 700; margin-bottom: 8px;">
+                            PLAYER SCOUTING REPORT
+                        </h1>
+                        <h2 style="font-size: 24px; color: #d4af37; font-weight: 600; margin-bottom: 8px;">
+                            ${player.name}
+                        </h2>
+                        <p style="font-size: 16px; color: #666;">
+                            ${player.team} • ${player.position} • Shoots ${player.handed}
+                        </p>
+                        <p style="font-size: 14px; color: #999; margin-top: 8px;">${today}</p>
+                    </div>
+                    
+                    <!-- Executive Summary -->
+                    <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 16px; margin-bottom: 24px; border-radius: 4px; page-break-inside: avoid;">
+                        <h3 style="font-weight: 700; color: #1e40af; margin-bottom: 10px; font-size: 15px;">
+                            📊 EXECUTIVE SUMMARY
+                        </h3>
+                        <p style="line-height: 1.6; color: #1e3a8a; font-size: 13px;">
+                            <strong>${player.name}</strong> is a ${player.position} for ${player.team} who shoots ${player.handed}. 
+                            With <strong>${player.shots} total shots</strong> (${player.percentile}th percentile), they demonstrate 
+                            ${player.attackLane.toLowerCase()} tendencies with a <strong>${player.strongSidePct}% bias toward the ${player.handed === 'R' ? 'right' : 'left'} wing</strong>.
+                            ${epvStats.avg_delta_epv > 0 ? ` Generates <strong>${epvStats.avg_delta_epv.toFixed(3)} Δ EPV per event</strong> (${epvStats.epv_percentile}th percentile).` : ''}
+                        </p>
+                    </div>
+                    
+                    <!-- Key Statistics -->
+                    <div style="margin-bottom: 24px; page-break-inside: avoid;">
+                        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 2px solid #d4af37;">
+                            Key Statistics
+                        </h3>
+                        <div style="display: grid; grid-template-columns: repeat(${epvStats.avg_delta_epv > 0 ? 3 : 2}, 1fr); gap: 12px;">
+                            <div style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; background: #f9f9f9; text-align: center;">
+                                <div style="font-size: 10px; color: #666; text-transform: uppercase; margin-bottom: 4px;">Total Shots</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 22px; font-weight: 700; color: #d4af37;">${player.shots}</div>
+                                <div style="font-size: 10px; color: #999; margin-top: 2px;">${player.percentile}th %ile</div>
+                            </div>
+                            <div style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; background: #f9f9f9; text-align: center;">
+                                <div style="font-size: 10px; color: #666; text-transform: uppercase; margin-bottom: 4px;">High Danger</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 22px; font-weight: 700; color: #ff4444;">${player.highDanger}</div>
+                                <!-- Original red (reverted) -->
+                                <div style="font-size: 10px; color: #999; margin-top: 2px;">${player.hdPercentile}th %ile</div>
+                            </div>
+                            ${epvStats.avg_delta_epv > 0 ? `
+                            <div style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; background: #e7f3ff; border: 2px solid #4488ff; text-align: center;">
+                                <!-- Light blue (reverted) -->
+                                <div style="font-size: 10px; color: #0d47a1; text-transform: uppercase; margin-bottom: 4px;">EPV Impact</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 22px; font-weight: 700; color: #4488ff;">${epvStats.avg_delta_epv.toFixed(3)}</div>
+                                <div style="font-size: 10px; color: #0d47a1; margin-top: 2px;">${epvStats.epv_percentile}th %ile</div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                    
+                    <!-- Speed Bursts -->
+                    ${player.bursts20 > 0 || player.bursts22 > 0 ? `
+                    <div style="margin-bottom: 24px; page-break-inside: avoid;">
+                        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 2px solid #d4af37;">
+                            ⚡ Speed Bursts
+                        </h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div style="border: 2px solid #ddd; border-radius: 8px; padding: 16px; background: #f9f9f9; text-align: center;">
+                                <div style="font-size: 12px; color: #666; font-weight: 600; margin-bottom: 8px;">20+ MPH Bursts</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 32px; font-weight: 700; color: #d4af37; margin-bottom: 4px;">${player.bursts20}</div>
+                                <div style="font-size: 11px; color: #999; margin-bottom: 8px;">Total bursts</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; color: #4488ff;">${player.bursts20_per60}</div>
+                                <div style="font-size: 10px; color: #999;">per 60 minutes</div>
+                            </div>
+                            <div style="border: 2px solid #ddd; border-radius: 8px; padding: 16px; background: #f9f9f9; text-align: center;">
+                                <div style="font-size: 12px; color: #666; font-weight: 600; margin-bottom: 8px;">22+ MPH Bursts</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 32px; font-weight: 700; color: #d4af37; margin-bottom: 4px;">${player.bursts22}</div>
+                                <div style="font-size: 11px; color: #999; margin-bottom: 8px;">Total bursts</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; color: #4488ff;">${player.bursts22_per60}</div>
+                                <div style="font-size: 10px; color: #999;">per 60 minutes</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px; padding: 12px; background: #e7f3ff; border-radius: 6px; text-align: center;">
+                            <div style="font-size: 11px; color: #0d47a1;">
+                                <strong>Skating Profile:</strong> ${parseFloat(player.bursts22_per60) > 5 ? 'Elite explosive speed' : parseFloat(player.bursts20_per60) > 10 ? 'High-speed capable' : 'Standard skating'} • ${player.TOI_minutes} min TOI
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <!-- Shot Distribution -->
+                    <div style="margin-bottom: 24px; page-break-inside: avoid;">
+                        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 2px solid #d4af37;">
+                            Shot Distribution
+                        </h3>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+                            <div style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center; background: #f9f9f9;">
+                                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">Period 1</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700;">${shotsByPeriod[1]}</div>
+                            </div>
+                            <div style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center; background: #f9f9f9;">
+                                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">Period 2</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700;">${shotsByPeriod[2]}</div>
+                            </div>
+                            <div style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center; background: #f9f9f9;">
+                                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">Period 3</div>
+                                <div style="font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700;">${shotsByPeriod[3] || 0}</div>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                            <div style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center;">
+                                <div style="font-size: 10px; color: #666;">High Danger</div>
+                                <div style="font-size: 16px; font-weight: 700; color: #ff4444;">${player.highDanger}</div>
+                                <!-- Original red (reverted) -->
+                            </div>
+                            <div style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center;">
+                                <div style="font-size: 10px; color: #666;">Mid Range</div>
+                                <div style="font-size: 16px; font-weight: 700; color: #ffaa33;">${player.midRange}</div>
+                            </div>
+                            <div style="border: 1px solid #ddd; border-radius: 4px; padding: 10px; text-align: center;">
+                                <div style="font-size: 10px; color: #666;">Long Range</div>
+                                <div style="font-size: 16px; font-weight: 700; color: #4488ff;">${player.longRange}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Attack Tendencies & Zone Time (Two Columns) -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; page-break-inside: avoid;">
+                        <div>
+                            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #d4af37;">
+                                Attack Tendencies
+                            </h3>
+                            <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+                                <tr><td style="padding: 6px 0; border-bottom: 1px solid #ddd;"><strong>Strong Side:</strong></td><td style="padding: 6px 0; border-bottom: 1px solid #ddd;">${player.strongSidePct}% ${player.handed === 'R' ? 'Right' : 'Left'}</td></tr>
+                                <tr><td style="padding: 6px 0; border-bottom: 1px solid #ddd;"><strong>Attack Lane:</strong></td><td style="padding: 6px 0; border-bottom: 1px solid #ddd;">${player.attackLane}</td></tr>
+                                <tr><td style="padding: 6px 0;"><strong>Shot Zone:</strong></td><td style="padding: 6px 0;">${player.shotReleaseZone}</td></tr>
+                            </table>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #d4af37;">
+                                Zone Time
+                            </h3>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                                <div style="text-align: center; padding: 12px; background: #f9f9f9; border-radius: 4px;">
+                                    <div style="font-size: 11px; color: #666; margin-bottom: 4px;">DEF</div>
+                                    <div style="font-size: 20px; font-weight: 700;">${player.defZone}%</div>
+                                </div>
+                                <div style="text-align: center; padding: 12px; background: #f9f9f9; border-radius: 4px;">
+                                    <div style="font-size: 11px; color: #666; margin-bottom: 4px;">NEU</div>
+                                    <div style="font-size: 20px; font-weight: 700;">${player.neutralZone}%</div>
+                                </div>
+                                <div style="text-align: center; padding: 12px; background: #fff3cd; border-radius: 4px; border: 2px solid #d4af37;">
+                                    <div style="font-size: 11px; color: #666; margin-bottom: 4px;">OFF</div>
+                                    <div style="font-size: 20px; font-weight: 700; color: #d4af37;">${player.offZone}%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Defensive Positioning -->
+                    <div style="margin-bottom: 24px; page-break-inside: avoid;">
+                        <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #d4af37;">
+                            Defensive Positioning Recommendations
+                        </h3>
+                        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 14px; margin-bottom: 12px; border-radius: 4px;">
+                            <div style="font-weight: 700; color: #856404; margin-bottom: 6px; font-size: 13px;">🎯 LATERAL</div>
+                            <div style="color: #856404; font-size: 12px; line-height: 1.5;">
+                                Shade ${player.handed === 'R' ? 'right' : 'left'}. ${player.attackLane.includes('Inside') ? 'Cut inside lane.' : 'Allow inside.'}
+                            </div>
+                        </div>
+                        <div style="background: #d1ecf1; border-left: 4px solid #17a2b8; padding: 14px; border-radius: 4px;">
+                            <div style="font-weight: 700; color: #0c5460; margin-bottom: 6px; font-size: 13px;">📏 GAP CONTROL</div>
+                            <div style="color: #0c5460; font-size: 12px; line-height: 1.5;">
+                                Maintain 6-8 ft gap. Standard pressure on entries.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Coaching Notes -->
+                    <div style="background: #e7f3ff; border: 2px solid #2196f3; padding: 16px; border-radius: 6px; page-break-inside: avoid;">
+                        <h3 style="font-weight: 700; color: #0d47a1; margin-bottom: 10px; font-size: 14px;">
+                            📝 COACHING NOTES
+                        </h3>
+                        <div style="line-height: 1.7; color: #0d47a1; font-size: 12px;">
+                            <p style="margin-bottom: 8px;"><strong>Primary Threat:</strong> ${player.highDanger > player.midRange ? 'High-danger shooter - prioritize slot coverage' : 'Perimeter shooter'}</p>
+                            ${epvStats.avg_delta_epv > 0 ? `<p style="margin-bottom: 8px;"><strong>Expected Impact:</strong> ${epvStats.avg_delta_epv.toFixed(3)} Δ EPV per event (${epvStats.epv_percentile}th percentile) - ${epvStats.epv_percentile >= 80 ? 'HIGH-IMPACT offensive player' : 'Above average threat'}</p>` : ''}
+                            ${player.OIL_per_min > 0 ? `<p style="margin-bottom: 8px;"><strong>On-Ice Load:</strong> ${player.OIL_per_min} OIL·min⁻¹ (${player.TOI_minutes} min TOI) - ${parseFloat(player.OIL_per_min) > 2.0 ? 'High workload' : parseFloat(player.OIL_per_min) > 1.0 ? 'Moderate workload' : 'Low workload'}<br><span style="font-size: 10px; color: #5a7ba3; font-style: italic;">* Based on 2D tracking model (horizontal movement only)</span></p>` : ''}
+                            <p style="margin-bottom: 8px;"><strong>Shot Selection:</strong> Prefers ${player.shotReleaseZone.toLowerCase()}</p>
+                            <p style="margin: 0;"><strong>Matchup:</strong> ${player.handed === 'R' ? 'Right' : 'Left'}-handed, ${player.strongSidePct}% bias - shade accordingly</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div style="margin-top: 30px; padding-top: 16px; border-top: 2px solid #ddd; text-align: center; color: #999; font-size: 10px;">
+                        <p>Individual Player Scouting Report • Hockey Intelligence Analytics</p>
+                        <p>${today}</p>
+                        <p style="margin-top: 6px; font-weight: 600;">CONFIDENTIAL - FOR COACHING STAFF USE ONLY</p>
+                    </div>
+                    
+                    <!-- Page 3: Shot Zone Map -->
+                    <div style="page-break-before: always; page-break-inside: avoid;">
+                        <h2 style="font-family: 'DM Sans', sans-serif; font-size: 28px; font-weight: 700; text-align: center; margin-bottom: 30px; color: #0a1628;">
+                            Shots On Goal Zone Map
+                        </h2>
+                        <div style="display: grid; grid-template-columns: 420px 1fr; gap: 30px; align-items: start;">
+                            <!-- Zone Map -->
+                            <div>
+                                <svg id="zone-map-svg" width="420" height="480" viewBox="0 0 204 256" style="border: 2px solid #ddd; border-radius: 8px; background: white;"></svg>
+                            </div>
+                            <!-- Stats Panel -->
+                            <div>
+                                <div style="margin-bottom: 16px;">
+                                    <h3 style="font-size: 20px; font-weight: 700; color: #0a1628; margin-bottom: 8px;">
+                                        ${player.name}
+                                    </h3>
+                                    <p style="font-size: 13px; color: #666;">Avg. by Position (${player.positionGroup})</p>
+                                </div>
+                                
+                                <div style="margin-bottom: 16px; padding: 14px; background: #0a1628; color: white; border-radius: 6px;">
+                                    <div style="font-size: 11px; color: #7a8a9e; margin-bottom: 4px;">${player.percentile}th</div>
+                                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                                        <div style="font-family: 'Space Mono', monospace; font-size: 42px; font-weight: 700;">${player.shots}</div>
+                                        <div style="font-size: 20px; color: #7a8a9e;">64</div>
+                                    </div>
+                                    <div style="font-size: 10px; color: #7a8a9e; text-transform: uppercase; margin-top: 4px;">ALL LOCATIONS</div>
+                                </div>
+                                
+                                <div style="margin-bottom: 16px; padding: 14px; background: #0a1628; color: white; border-radius: 6px;">
+                                    <div style="font-size: 11px; color: #7a8a9e; margin-bottom: 4px;">${player.hdPercentile}th</div>
+                                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                                        <div style="font-family: 'Space Mono', monospace; font-size: 42px; font-weight: 700;">${player.highDanger}</div>
+                                        <div style="font-size: 20px; color: #7a8a9e;">24</div>
+                                    </div>
+                                    <div style="font-size: 10px; color: #7a8a9e; text-transform: uppercase; margin-top: 4px;">HIGH-DANGER</div>
+                                </div>
+                                
+                                <div style="margin-bottom: 16px; padding: 14px; background: #0a1628; color: white; border-radius: 6px;">
+                                    <div style="font-size: 11px; color: #7a8a9e; margin-bottom: 4px;">${player.mdPercentile}th</div>
+                                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                                        <div style="font-family: 'Space Mono', monospace; font-size: 42px; font-weight: 700;">${player.midRange}</div>
+                                        <div style="font-size: 20px; color: #7a8a9e;">20</div>
+                                    </div>
+                                    <div style="font-size: 10px; color: #7a8a9e; text-transform: uppercase; margin-top: 4px;">MID-RANGE</div>
+                                </div>
+                                
+                                <div style="padding: 14px; background: #f5f5f5; color: #0a1628; border-radius: 6px; border: 2px dashed #ccc;">
+                                    <div style="font-size: 11px; color: #999; margin-bottom: 4px;">${player.ldPercentile}th</div>
+                                    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                                        <div style="font-family: 'Space Mono', monospace; font-size: 42px; font-weight: 700;">${player.longRange}</div>
+                                        <div style="font-size: 20px; color: #999;">6</div>
+                                    </div>
+                                    <div style="font-size: 10px; color: #999; text-transform: uppercase; margin-top: 4px;">LONG-RANGE</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove any existing report divs first (cleanup from previous reports)
+            document.querySelectorAll('.print-report').forEach(el => el.remove());
+            
+            // Temporarily append to body
+            document.body.appendChild(reportDiv);
+            
+            // Generate the shot zone map SVG after DOM is ready
+            generateShotZoneMapSVG(player);
+            
+            setTimeout(() => {
+                window.print();
+                document.body.removeChild(reportDiv);
+            }, 200);  // Give SVG time to render
+        }
+        
+        // Generate shot zone map SVG for print report (NHL EDGE style with blue gradient)
+        // Minimal-separators NHL-style zone map
+        // - Fewer seams (2 vertical + 2 horizontal) + optional top arc
+        // - Opacity encodes shot volume within tier
+        // - White halo for numbers (readable on dark blues)
+        // - Corrected zone indices in classification logic
+        // NHL-style zone map (minimal seams, goal line at adj_x=89, percentile-driven palette)
+        function generateShotZoneMapSVG(player, opts = {}) {
+            const {
+                labelMode = 'count',
+                showZoneTags = false,
+                showRinkCues = false
+            } = opts;
+
+            const svg = d3.select('#zone-map-svg');
+            if (!svg.node()) {
+                console.warn('⚠️ SVG element not found for zone map');
+                return;
+            }
+            svg.selectAll('*').remove();
+
+            // Data prep
+            const shotEvents = (player?.events || []).filter(e =>
+                ((e.description?.includes('SHOT') || e.event_type === 'shot')) &&
+                e.x_adj !== null && e.y_adj !== null
+            );
+
+            // Zones
+            const zones = [
+                { name: 'crease',        x:  68, y:  30, w:  68, h: 20, tx: 102, ty:  44, count: 0 },
+                { name: 'low_slot',      x:  68, y:  50, w:  68, h: 32, tx: 102, ty:  69, count: 0 },
+                { name: 'l_net_side',    x:  34, y:  30, w:  34, h: 52, tx:  51, ty:  52, count: 0 },
+                { name: 'r_net_side',    x: 136, y:  30, w:  34, h: 52, tx: 153, ty:  52, count: 0 },
+                { name: 'high_slot',     x:  68, y:  82, w:  68, h: 33, tx: 102, ty:  98, count: 0 },
+                { name: 'l_circle',      x:   2, y:  82, w:  66, h: 33, tx:  35, ty:  98, count: 0 },
+                { name: 'r_circle',      x: 136, y:  82, w:  66, h: 33, tx: 169, ty:  98, count: 0 },
+                { name: 'outside_l',     x:   2, y:  30, w:  32, h: 52, tx:  18, ty:  56, count: 0 },
+                { name: 'outside_r',     x: 170, y:  30, w:  32, h: 52, tx: 186, ty:  56, count: 0 },
+                { name: 'l_corner',      x:   2, y:   3, w:  66, h: 27, tx:  35, ty:  16, count: 0 },
+                { name: 'behind_net',    x:  68, y:   3, w:  68, h: 27, tx: 102, ty:  16, count: 0 },
+                { name: 'r_corner',      x: 136, y:   3, w:  66, h: 27, tx: 169, ty:  16, count: 0 },
+                { name: 'l_point',       x:   2, y: 115, w:  66, h: 65, tx:  35, ty: 147, count: 0 },
+                { name: 'center_point',  x:  68, y: 115, w:  68, h: 65, tx: 102, ty: 147, count: 0 },
+                { name: 'r_point',       x: 136, y: 115, w:  66, h: 65, tx: 169, ty: 147, count: 0 },
+                { name: 'neutral',       x:   2, y: 180, w: 200, h: 32, tx: 102, ty: 196, count: 0 }
+            ];
+
+            // Classification - goal at (89, 0)
+            shotEvents.forEach(shot => {
+                const x = shot.x_adj;
+                const y = shot.y_adj;
+                const dist = Math.hypot(89 - x, y);
+
+                if (x > 89) {
+                    if (y < -8) zones[9].count++;
+                    else if (y > 8) zones[11].count++;
+                    else zones[10].count++;
+                } else if (x > 75 && dist < 15) {
+                    if (Math.abs(y) < 6) zones[0].count++;
+                    else if (y < 0) zones[2].count++;
+                    else zones[3].count++;
+                } else if (x > 64 && dist < 30) {
+                    zones[1].count++;
+                } else if (x > 25) {
+                    if (dist < 40) {
+                        if (Math.abs(y) < 15) zones[4].count++;
+                        else if (y < 0) zones[5].count++;
+                        else zones[6].count++;
+                    } else {
+                        if (y < -18) zones[5].count++;
+                        else if (y > 18) zones[6].count++;
+                        else zones[4].count++;
+                    }
+                } else if (x > 0) {
+                    if (y < -18) zones[12].count++;
+                    else if (y > 18) zones[14].count++;
+                    else zones[13].count++;
+                } else if (x > -25) {
+                    if (y < -25) zones[7].count++;
+                    else if (y > 25) zones[8].count++;
+                    else zones[15].count++;
+                } else {
+                    zones[15].count++;
+                }
+            });
+
+            const totalShots = d3.sum(zones, z => z.count);
+
+            // Scene scaffold
+            const g = svg.append('g');
+
+            // Outer rink (rounded top), dark interior
+            g.append('path')
+                .attr('d', 'M2,15 Q2,3 13,3 L191,3 Q202,3 202,15 L202,212 L2,212 Z')
+                .attr('fill', '#0b0f14')
+                .attr('stroke', '#000').attr('stroke-width', 2);
+
+            // Subtle shadow
+            const defs = g.append('defs');
+            const filter = defs.append('filter')
+                .attr('id', 'zoneShadow').attr('x','-5%').attr('y','-5%')
+                .attr('width','110%').attr('height','110%');
+            filter.append('feDropShadow')
+                .attr('dx', 0).attr('dy', 1).attr('stdDeviation', 0.6)
+                .attr('flood-color', '#000').attr('flood-opacity', 0.12);
+
+            // Scales and percentile-driven palettes
+            const xScale = d3.scaleLinear().domain([-25, 200]).range([2, 202]);
+            const yScale = d3.scaleLinear().domain([-42.5, 42.5]).range([212, 3]);
+
+            // Single blue gradient for danger zones (consistent for all players)
+            const colors = {
+                high: '#003d5c',  // Dark blue - high danger
+                mid:  '#2d6ba3',  // Medium blue - mid danger
+                low:  '#87b8d9'   // Light blue - low danger
+            };
+
+            const zoneFill = (i) => (i < 4 ? colors.high : i < 9 ? colors.mid : colors.low);
+
+            const maxCount = d3.max(zones, z => z.count) || 1;
+            const fillOpacity = d3.scaleLinear().domain([0, maxCount]).range([0.35, 0.95]);
+
+            const labelFontSize = (i) => (i < 4 ? 14 : 12);
+            const showValue = (n) => (n === 0 ? '–' : n.toString());
+            const zonePercent = (n) => totalShots === 0 ? '–' : Math.round((n / totalShots) * 100).toString();
+            
+            // Percentile-driven BORDER styling (not color)
+            const p = Number.isFinite(player?.percentile) ? player.percentile : 50;
+            const bucket = (p <= 50) ? 'low' : (p <= 80 ? 'mid' : 'high');
+            
+            const borderStyles = {
+                low:  { color: '#666666', width: 1.0, name: 'Gray' },      // Thin gray (1-50th)
+                mid:  { color: '#c0c0c0', width: 1.8, name: 'Silver' },    // Silver medium (51-80th)
+                high: { color: '#d4af37', width: 2.5, name: 'Gold' }       // Thick gold (81-99th)
+            };
+            const borderStyle = borderStyles[bucket];
+
+            // Draw zones with percentile-based borders
+            zones.forEach((z, i) => {
+                // Show white if count is 0, otherwise use danger-based blue
+                const baseColor = zoneFill(i);
+                const finalColor = z.count === 0 ? '#ffffff' : baseColor;
+                const finalOpacity = z.count === 0 ? 1.0 : fillOpacity(z.count);
+                
+                // Use percentile-based border on non-white zones
+                const useBorder = z.count > 0;
+                
+                g.append('rect')
+                    .attr('x', z.x).attr('y', z.y)
+                    .attr('width', z.w).attr('height', z.h)
+                    .attr('fill', finalColor)
+                    .attr('fill-opacity', finalOpacity)
+                    .attr('stroke', useBorder ? borderStyle.color : 'none')
+                    .attr('stroke-width', useBorder ? borderStyle.width : 0)
+                    .attr('filter', z.count === 0 ? 'none' : 'url(#zoneShadow)')
+                    .attr('rx', z.y < 5 ? 8 : 0);
+            });
+
+            // Minimal white separators
+            [
+                [68, 3, 68, 212],
+                [136, 3, 136, 212],
+                [2, 82, 202, 82],
+                [2, 115, 202, 115]
+            ].forEach(([x1, y1, x2, y2]) => {
+                g.append('line')
+                    .attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2)
+                    .attr('stroke', '#ffffff')
+                    .attr('stroke-width', 2.2)
+                    .attr('stroke-linecap', 'round')
+                    .attr('opacity', 0.95);
+            });
+
+            // Goal line at x = 89
+            g.append('line')
+                .attr('x1', xScale(89)).attr('y1', yScale(-26))
+                .attr('x2', xScale(89)).attr('y2', yScale(26))
+                .attr('stroke', '#ffffff')
+                .attr('stroke-width', 2.2)
+                .attr('stroke-linecap', 'round')
+                .attr('opacity', 0.95);
+
+            // Optional rink cues
+            if (showRinkCues) {
+                g.append('line')
+                    .attr('x1', xScale(25)).attr('y1', yScale(-42.5))
+                    .attr('x2', xScale(25)).attr('y2', yScale(42.5))
+                    .attr('stroke', '#2b7fd8').attr('stroke-opacity', 0.6).attr('stroke-width', 2);
+            }
+
+            // Labels with white outline and BLACK fill (like bottom row in image)
+            zones.forEach((z, i) => {
+                const textVal = (labelMode === 'percent') ? zonePercent(z.count) : showValue(z.count);
+
+                g.append('text')
+                    .attr('x', z.tx).attr('y', z.ty)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-family', 'Space Mono, monospace')
+                    .attr('font-weight', '700')
+                    .attr('font-size', `${labelFontSize(i)}px`)
+                    .attr('paint-order', 'stroke')
+                    .attr('stroke', '#ffffff')
+                    .attr('stroke-width', 3.5)
+                    .attr('fill', '#000000')  // BLACK fill for all numbers
+                    .text(textVal);
+            });
+
+            // Optional zone tags
+            if (showZoneTags) {
+                zones.forEach(z => {
+                    g.append('text')
+                        .attr('x', z.x + 4).attr('y', z.y + 12)
+                        .attr('font-size', '8px')
+                        .attr('fill', '#cdd6e4')
+                        .attr('opacity', 0.8).text(z.name.toUpperCase());
+                });
+            }
+
+            // Percentile legend (shows border styles, not colors)
+            const lY = 228;
+            g.append('text')
+                .attr('x', 30).attr('y', lY)
+                .attr('font-size', '9px')
+                .attr('fill', '#c6d2e1')
+                .text('Percentile');
+
+            const legend = [
+                { x:  75, label: '1–50',  key: 'low',  borderColor: '#666666', borderWidth: 1.0 },
+                { x: 123, label: '51–80', key: 'mid',  borderColor: '#c0c0c0', borderWidth: 1.8 },
+                { x: 171, label: '81–99', key: 'high', borderColor: '#d4af37', borderWidth: 2.5 }
+            ];
+
+            legend.forEach(({ x, label, key, borderColor, borderWidth }) => {
+                const active = (key === bucket);
+                
+                // Show sample blue box with the border style
+                g.append('rect')
+                    .attr('x', x).attr('y', lY - 8)
+                    .attr('width', 35).attr('height', 10)
+                    .attr('fill', '#2d6ba3')  // Medium blue for all
+                    .attr('stroke', borderColor)
+                    .attr('stroke-width', active ? borderWidth : 0.8)
+                    .attr('rx', 2);
+                    
+                g.append('text')
+                    .attr('x', x + 17.5).attr('y', lY)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '8px')
+                    .attr('fill', active ? '#ffffff' : '#cccccc')
+                    .attr('font-weight', active ? '700' : '400')
+                    .text(label);
+            });
+            
+            // Danger Zone Reference (shows actual blue gradient)
+            const refY = 245;
+            g.append('text')
+                .attr('x', 30).attr('y', refY)
+                .attr('font-size', '9px')
+                .attr('fill', '#c6d2e1')
+                .text('Danger Zones');
+            
+            const dangerLegend = [
+                { x: 75, color: colors.high, label: 'High' },
+                { x: 123, color: colors.mid, label: 'Mid' },
+                { x: 171, color: colors.low, label: 'Low' }
+            ];
+            
+            dangerLegend.forEach(({ x, color, label }) => {
+                g.append('rect')
+                    .attr('x', x).attr('y', refY - 8)
+                    .attr('width', 35).attr('height', 10)
+                    .attr('fill', color)
+                    .attr('stroke', '#999')
+                    .attr('stroke-width', 0.5)
+                    .attr('rx', 2);
+                g.append('text')
+                    .attr('x', x + 17.5).attr('y', refY)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '8px')
+                    .attr('fill', '#ffffff')
+                    .text(label);
+            });
+        }
+
+        // Animation controls
+        function togglePlayPause() {
+            isPlaying = !isPlaying;
+            const btn = document.getElementById('play-pause-btn');
+            
+            if (isPlaying) {
+                btn.textContent = '⏸ Pause';
+                btn.classList.add('playing');
+                startAnimation();
+            } else {
+                btn.textContent = '▶ Play';
+                btn.classList.remove('playing');
+                stopAnimation();
+            }
+        }
+
+        function startAnimation() {
+            let lastTime = performance.now();
+            
+            function animate(currentTime) {
+                if (!isPlaying) return;
+                
+                const deltaTime = (currentTime - lastTime) / 1000;
+                lastTime = currentTime;
+                
+                currentReplayTime += deltaTime * playbackSpeed;
+                
+                // Stop at actual end time (may be less than +3 if faceoff occurred)
+                const maxReplayTime = replayData.endTime - replayData.shotTime;
+                
+                if (currentReplayTime > maxReplayTime) {
+                    currentReplayTime = maxReplayTime;
+                    isPlaying = false;
+                    document.getElementById('play-pause-btn').textContent = '▶ Play';
+                    document.getElementById('play-pause-btn').classList.remove('playing');
+                    renderReplayFrame();
+                } else {
+                    renderReplayFrame();
+                    animationFrameId = requestAnimationFrame(animate);
+                }
+            }
+            
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        function stopAnimation() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        }
+
+        function restartReplay() {
+            stopAnimation();
+            currentReplayTime = -5;
+            isPlaying = false;
+            document.getElementById('play-pause-btn').textContent = '▶ Play';
+            document.getElementById('play-pause-btn').classList.remove('playing');
+            renderReplayFrame();
+        }
+
+        function stepBack() {
+            stopAnimation();
+            currentReplayTime = Math.max(-5, currentReplayTime - 0.5);
+            renderReplayFrame();
+        }
+
+        function stepForward() {
+            stopAnimation();
+            if (!replayData) return;
+            const maxTime = replayData.endTime - replayData.shotTime;
+            currentReplayTime = Math.min(maxTime, currentReplayTime + 0.5);
+            renderReplayFrame();
+        }
+
+        function changePlaybackSpeed(speed) {
+            playbackSpeed = parseFloat(speed);
+        }
+
+        function scrubTimeline(value) {
+            stopAnimation();
+            if (!replayData) return;
+            const maxTime = replayData.endTime - replayData.shotTime;
+            currentReplayTime = -5 + (value / 100) * replayData.actualDuration;
+            renderReplayFrame();
+        }
+
+        function setupEventListeners() {
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const filterType = this.dataset.filter;
+                    const value = this.dataset.value;
+                    document.querySelectorAll(`[data-filter="${filterType}"]`).forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    filters[filterType] = value;
+                    renderPlayerList();
+                });
+            });
+
+            document.getElementById('player-search').addEventListener('input', function(e) {
+                filters.search = e.target.value;
+                renderPlayerList();
+            });
+
+            document.getElementById('shot-selector').addEventListener('change', function(e) {
+                if (e.target.value !== '') selectShot(parseInt(e.target.value));
+            });
+
+            document.getElementById('shot-timeline').addEventListener('input', function(e) {
+                selectShot(parseInt(e.target.value));
+            });
+
+            document.getElementById('team-lineup-selector').addEventListener('change', function(e) {
+                filters.team = e.target.value;
+                
+                // Update available games based on selected team
+                if (filters.team !== 'all') {
+                    // Only show games where this team played
+                    const teamGames = eventsData
+                        .filter(event => event.team === filters.team)
+                        .map(event => event.game_id);
+                    availableGames = ['all', ...new Set(teamGames)];
+                } else {
+                    // Show all games
+                    availableGames = ['all', ...new Set(eventsData.map(e => e.game_id))];
+                }
+                
+                populateGameSelector();
+                filters.game = 'all'; // Reset game filter
+                renderPlayerList();
+            });
+            
+            document.getElementById('game-selector').addEventListener('change', function(e) {
+                filters.game = e.target.value;
+                
+                // Update available teams based on selected game
+                if (filters.game !== 'all') {
+                    // Only show teams that played in this game
+                    const gameTeams = eventsData
+                        .filter(event => event.game_id === filters.game)
+                        .map(event => event.team);
+                    availableTeams = ['all', ...new Set(gameTeams)];
+                } else {
+                    // Show all teams
+                    availableTeams = ['all', ...new Set(processedPlayers.map(p => p.team))];
+                }
+                
+                populateTeamSelector();
+                filters.team = 'all'; // Reset team filter
+                
+                // Reload shots for current player to respect game filter
+                if (currentPlayer) {
+                    loadPlayerShots();
+                }
+                
+                renderPlayerList();
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', function() {
+            // Data will be loaded from hockey_data_small.js automatically
+            console.log('Waiting for data from hockey_data_small.js...');
+        });
+        
+        // ============================================================================
+        // EPV HELPER FUNCTIONS
+        // ============================================================================
+        
+        // Get EPV for a specific possession
+        function getEPVForPossession(gamePossessionId) {
+            if (!gamePossessionId || epvPossessionsData.length === 0) return null;
+            const possession = epvPossessionsData.find(p => p.game_possession_id === gamePossessionId);
+            return possession ? possession.epv : null;
+        }
+        
+        // Get EPV for an event (uses game_id + sequence_id to build possession ID)
+        function getEPVForEvent(event) {
+            if (!event || !event.game_id || !event.sequence_id) return null;
+            const linkId = event.game_id + '_SEQ' + event.sequence_id;
+            const possession = epvPossessionsData.find(p => p.game_possession_id === linkId);
+            return possession ? possession.epv : null;
+        }
+        
+        // Assign player numbers 1-6 sequentially (no special goalie logic)
+        function assignPlayerNumbers(players) {
+            return players.map((player, index) => ({
+                ...player,
+                number: (index % 6) + 1  // Cycles 1-6
+            }));
+        }
+        
+        // Get player's EPV statistics
+        function getPlayerEPVStats(playerId) {
+            if (!playerId || epvPlayerData.length === 0) {
+                return {
+                    avg_epv_per_possession: 0,
+                    total_delta_epv: 0,
+                    avg_delta_epv: 0,
+                    possessions: 0,
+                    epv_percentile: 0,
+                    shots: 0
+                };
+            }
+            
+            const playerStats = epvPlayerData.find(p => p.player_id === playerId);
+            
+            if (!playerStats) {
+                return {
+                    avg_epv_per_possession: 0,
+                    total_delta_epv: 0,
+                    avg_delta_epv: 0,
+                    possessions: 0,
+                    epv_percentile: 0,
+                    shots: 0
+                };
+            }
+            
+            return playerStats;
+        }
+    </script>
+    
+    <!-- Load your 30-game hockey data -->
+    <script src="hockey_data_small.js"></script>
+    
+    <!-- Load EPV model data -->
+    <script src="epv_data.js"></script>
+</body>
+</html>
